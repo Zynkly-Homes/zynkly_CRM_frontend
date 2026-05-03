@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sc-light-bg-shell:   #f4f4f5;
+  --sc-light-bg-card:    #ffffff;
+  --sc-light-bg-surface: #f9fafb;
+  --sc-light-border:     #e4e4e7;
+  --sc-dark-bg-sidebar:  #1e1e1e;
+  --sc-dark-bg-elevated: #252526;
+}
+
+.sc-scrollbar::-webkit-scrollbar              { width: 4px; }
+.sc-scrollbar::-webkit-scrollbar-track        { background: transparent; }
+.sc-scrollbar::-webkit-scrollbar-thumb        { background: rgba(0,0,0,0.15); border-radius: 2px; }
+.dark .sc-scrollbar::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); }
+
+.globalPadding { padding: 24px; }
+@media (max-width: 768px) { .globalPadding { padding: 16px; } }
+
+.finbros-gradient { background: linear-gradient(135deg, #f8f9ff 0%, #f0f1ff 100%); }

@@ -1,0 +1,45 @@
+01_folder Structure for this component
+
+Sidebar/
+├── index.ts                   ← barrel export (import from here only)
+├── Sidebar.tsx                ← thin shell, ~90 lines, layout only
+├── types.ts                   ← all TypeScript interfaces in one place
+├── constants.ts               ← no more magic numbers anywhere
+├── hooks/
+│   ├── useSidebar.ts          ← collapsed + mobile + accordion state
+│   ├── useDarkMode.ts         ← dark mode isolated, reusable anywhere
+│   ├── useAuth.ts             ← logout logic, completely separate
+│   └── useNavigation.ts       ← nav items built from permissions + useMemo
+└── components/
+    ├── NavItem.tsx            ← NavLinkItem + NavButtonItem + NavIcon + NavChevron
+    ├── NavList.tsx            ← proper component replacing renderNav function
+    ├── SidebarLogo.tsx        ← logo + collapse button
+    ├── SidebarToggle.tsx      ← floating pill with reusable IconButton inside
+    ├── UserProfile.tsx        ← Avatar + ThemeToggle + ProfileDropdown sub-components
+    └── MobilePanel.tsx        ← portal + backdrop + MobilePanelHeader
+
+
+02_notes why we chose it?
+
+Key industry practices applied:
+Barrel export (index.ts) — consumers write import Sidebar from "@/components/Sidebar", never deep paths
+Custom hooks own their state — Sidebar.tsx has zero useState for business logic (only profileDropdownOpen which is pure UI)
+useMemo in useNavigation — nav array doesn't rebuild on every render
+No magic numbers — every z-index, breakpoint, duration lives in constants.ts
+NavList is a real component — not a function called inside JSX, so React can reconcile it properly
+UserProfile broken into Avatar + ThemeToggle + ProfileDropdown — each independently testable
+SidebarToggle has a reusable IconButton — no duplicated hover logic
+
+
+03_BRD
+The BRD is ready. Here's what's inside across 11 sections:
+Section 1 — Overview & Purpose — what this doc is, who reads it, the core philosophy.
+Section 2 — Folder Structure — the full tree with one-line descriptions of every file.
+Section 3 — Why Hooks Instead of Component State — a comparison table: without hooks vs with hooks, covering testability, reusability, readability, bug surface, and onboarding time. Includes the "golden rule" callout box.
+Sections 4 — File Reference (types, constants, index) — every export explained, before/after examples for magic numbers, the barrel export anti-patterns to avoid.
+Section 5 — Hooks Deep Dive — each of the 4 hooks with: every returned value described, the controlled/uncontrolled hybrid pattern, the logout flow step by step, why useMemo is critical in useNavigation, and why canView is private to the hook.
+Section 6 — Components Deep Dive — every component and sub-component: NavIcon, NavChevron, NavLinkItem, NavButtonItem, Avatar, ThemeToggle, ProfileDropdown, MobilePanelHeader — all documented. Includes the function-vs-component distinction for NavList with a side-by-side code example.
+Section 7 — Sidebar.tsx — what it does NOT do (the most important part), the profileProps spread pattern, why profileDropdownOpen is the only useState allowed there.
+Section 8 — Data Flow — a text diagram showing Redux → hooks → components, localStorage → hooks, cookies → useAuth, DOM events → useSidebar.
+Section 9 — How to Add a Nav Item — 4 steps, only one file to touch.
+Section 10 — Testing Guide — per-layer test strategy table.
