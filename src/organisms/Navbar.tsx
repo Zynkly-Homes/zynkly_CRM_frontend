@@ -7,9 +7,6 @@ import { useDarkMode } from '../hooks/useDarkMode';
 // import finbrosLogoLight from "../assets/images/finbroseLogoNewLightMood2.png";
 // import finbrosLogoDark from "../assets/images/finbroseLogoNewDarkMood2.png";
 
-//NEW LOGO CALCULAS
-import finbrosLogoLight from "../assets/images/FinBrosCalculusLog.png";
-import finbrosLogoDark from "../assets/images/FinBrosCalculusLogo.svg";
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();

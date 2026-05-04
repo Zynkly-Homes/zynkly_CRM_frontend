@@ -4,32 +4,65 @@ import React, {
   useContext,
   useMemo,
   useState,
-  useEffect,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCookies } from "react-cookie";
-import { postData } from "../services/crmServices";
-import { showToastnew } from "../../src/services/toastifynewService/toastifynewService";
+import { useDispatch, useSelector } from "react-redux";
 
-import { useDispatch } from "react-redux";
-import { setUserData, clearUserData } from "../store/slices/userSlice";
-
-// ✅ NEW IMPORT (ADD KIYA)
+import { postData, getData } from "../services/crmServices";
+import { showToastnew } from "../services/toastifynewService/toastifynewService";
+import { setUserData, clearUserData, selectUserData } from "../store/slices/userSlice";
 import { setAccessData, clearAccessData } from "../store/slices/accessSlice";
+import { clearApiKey } from "../store/slices/apiKeySlice";
 
-// -------- Types --------
-type User = {
-  id?: string;
-  name?: string;
-  email?: string;
-  role?: string;
-} | null;
+// ---- API response types ----
 
-type LoginBody = {
-  email?: string;
-  mobile?: string;
-  password: string;
-};
+interface LoginApiData {
+  token: string;
+  user: { user_id: string; email: string; role_id: string };
+}
+
+interface LoginResponse {
+  success: boolean;
+  message: string;
+  data: LoginApiData;
+}
+
+interface RoleAccessItem {
+  module_id: string;
+  create: boolean;
+  edit: boolean;
+  view: boolean;
+  delete: boolean;
+  transfer: boolean;
+  export: boolean;
+}
+
+interface ProfileData {
+  _id: string;
+  username: string;
+  email: string;
+  mobile_no: string;
+  role_id: string;
+  is_active: boolean;
+  role: {
+    _id: string;
+    role_name: string;
+    role_access: RoleAccessItem[];
+  };
+}
+
+interface ProfileResponse {
+  success: boolean;
+  message: string;
+  data: ProfileData;
+}
+
+// ---- Context types ----
+
+type User = { id: string; name: string; email: string; role: string } | null;
+
+type LoginBody = { email?: string; mobile?: string; password: string };
 
 type AuthContextType = {
   isAuthenticated: boolean;
@@ -40,203 +73,120 @@ type AuthContextType = {
   logout: () => Promise<void>;
 };
 
+// ---- Pure helpers ----
+
+const COOKIE_OPTIONS = { path: "/", sameSite: "lax" as const };
+
+function buildAccessMap(roleAccess: RoleAccessItem[]) {
+  return roleAccess.reduce<Record<string, Omit<RoleAccessItem, "module_id">>>(
+    (acc, { module_id, ...perms }) => {
+      acc[module_id.toLowerCase()] = perms;
+      return acc;
+    },
+    {}
+  );
+}
+
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  const e = err as { error?: { response?: { data?: { message?: string } } }; message?: string };
+  return e?.error?.response?.data?.message ?? e?.message ?? "Login failed";
+}
+
+function callLoginApi(email: string, password: string) {
+  return postData<LoginResponse>({
+    endpoint: "auth/login",
+    data: { email, password },
+    instance: "identity",
+  });
+}
+
+function fetchProfileApi(token: string) {
+  return getData<ProfileResponse>({
+    endpoint: "auth/profile",
+    token,
+    instance: "identity",
+  });
+}
+
+// ---- Context ----
+
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const USER_KEY = "auth_user_storage";
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
-  const [cookies, setCookie, removeCookie] = useCookies(["t", "auth_user"]);
-
+  const [cookies, setCookie, removeCookie] = useCookies(["t"]);
   const dispatch = useDispatch();
-
-  const [token, setToken] = useState<string | null>(
-    () => (cookies?.t ? String(cookies.t) : null)
-  );
-
-  const [user, setUser] = useState<User>(() => {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
-  });
-
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    const cookieTok = cookies?.t ? String(cookies.t) : null;
-    if (cookieTok !== token) {
-      setToken(cookieTok);
-    }
-  }, [cookies?.t]);
+  const userData = useSelector(selectUserData);
+  const token = cookies?.t ? String(cookies.t) : null;
+  const isAuthenticated = !!token;
 
-  // ================= LOGIN =================
+  const user = useMemo<User>(() => {
+    if (!userData.user_id) return null;
+    return {
+      id: userData.user_id,
+      name: userData.user_name ?? "",
+      email: userData.user_email ?? "",
+      role: userData.role_name ?? "",
+    };
+  }, [userData.user_id, userData.user_name, userData.user_email, userData.role_name]);
+
+  const applyProfile = useCallback(
+    (profile: ProfileData) => {
+      dispatch(
+        setUserData({
+          user_id: profile._id,
+          user_name: profile.username,
+          user_email: profile.email,
+          mobile_no: profile.mobile_no,
+          role_name: profile.role.role_name,
+          role_id: profile.role_id,
+          is_active: profile.is_active,
+        })
+      );
+      dispatch(setAccessData(buildAccessMap(profile.role.role_access)));
+    },
+    [dispatch]
+  );
+
   const login = useCallback(
-    async ({ email, mobile, password }: LoginBody) => {
+    async ({ email, password }: LoginBody) => {
       setIsLoading(true);
       try {
-        const { data: resultData } = await postData<any>({
-          endpoint: "admin/login",
+        const { data: loginResult } = await callLoginApi(email?.toLowerCase() ?? "", password);
+        if (!loginResult.data?.token) throw new Error(loginResult.message || "Login failed");
 
-          data: {
-            email: email ? email.toLowerCase() : undefined,
-            mobile,
-            password,
-          },
+        const tok = loginResult.data.token;
+        setCookie("t", tok, COOKIE_OPTIONS);
 
-          params: {},
-          instance: "crm",
-        });
+        const profileResult = await fetchProfileApi(tok);
+        applyProfile(profileResult.data);
 
-        if (!resultData?.token) {
-          throw new Error(resultData?.message || "Login failed");
-        }
-
-        const tok = resultData.token;
-
-        // ✅ SAVE TOKEN
-        setCookie("t", tok, {
-          path: "/",
-          sameSite: "lax",
-        });
-
-        setToken(tok);
-
-        // ================= OLD CODE (KEEPED) =================
-        const userData = {
-          email: email || "",
-          role: "admin",
-        };
-
-        setUser(userData);
-        localStorage.setItem("auth_user_storage", JSON.stringify(userData));
-
-        dispatch(
-          setUserData({
-            token: tok,
-            user_name: email,
-            role_id: "admin",
-          })
-        );
-        // ====================================================
-
-        // ================= NEW UPDATED LOGIC 🔥 =================
-        const userFromAPI = resultData.data;
-
-        // overwrite local user (better data)
-        setUser(userFromAPI);
-        localStorage.setItem(
-          "auth_user_storage",
-          JSON.stringify(userFromAPI)
-        );
-
-        // ✅ Redux user (correct data)
-        dispatch(
-          setUserData({
-            token: tok,
-            user_id: userFromAPI.id,
-            user_name: userFromAPI.name,
-            user_email: userFromAPI.email,
-            role_name: userFromAPI.role,
-            role_id: userFromAPI.role_id,
-          })
-        );
-
-        // ✅ 🔥 ACCESS STORE
-        const accessOutput = userFromAPI.role_access.reduce(
-          (acc: any, curr: any) => {
-            const key = curr.module_id.toLowerCase();
-
-            acc[key] = {
-              create: curr.create,
-              edit: curr.edit,
-              view: curr.view,
-              delete: curr.delete,
-              export: curr.export,
-              transfer: curr.transfer,
-            };
-
-            return acc;
-          },
-          {}
-        );
-
-        dispatch(setAccessData(accessOutput));
-        // =======================================================
-
-        showToastnew.success(resultData?.message || "Login successful");
-
-        // 🔥 UPDATED REDIRECT
+        showToastnew.success(loginResult.message || "Login successful");
         navigate("/", { replace: true });
-
-      } catch (err: any) {
-        const msg =
-          err?.error?.response?.data?.message ||
-          err?.message ||
-          "Login failed";
-
-        showToastnew.error(msg);
+      } catch (err: unknown) {
+        showToastnew.error(extractErrorMessage(err));
         throw err;
       } finally {
         setIsLoading(false);
       }
     },
-    [setCookie, dispatch, navigate]
+    [setCookie, applyProfile, navigate]
   );
 
-  // ================= LOGOUT =================
   const logout = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const currentToken = cookies?.t ? String(cookies.t) : null;
-
-      if (currentToken) {
-        try {
-          await postData<any>({
-            endpoint: "crmAuth/logout",
-            data: null,
-            params: {},
-            instance: "crm",
-            headers: {
-              Authorization: `Bearer ${currentToken}`,
-            },
-          });
-        } catch (err) {
-          console.log("Logout API failed, continuing...");
-        }
-      }
-    } finally {
-      localStorage.removeItem(USER_KEY);
-      setUser(null);
-
-      // ✅ CLEAR REDUX
-      dispatch(clearUserData());
-      dispatch(clearAccessData());
-
-      removeCookie("t", { path: "/" });
-      removeCookie("auth_user", { path: "/" });
-
-      setToken(null);
-      setIsLoading(false);
-
-      navigate("/login", { replace: true });
-    }
-  }, [navigate, removeCookie, dispatch, cookies?.t]);
-
-  const getEffectiveToken = () => {
-    return cookies?.t ? String(cookies.t) : null;
-  };
+    dispatch(clearUserData());
+    dispatch(clearAccessData());
+    dispatch(clearApiKey());
+    removeCookie("t", { path: "/" });
+    navigate("/login", { replace: true });
+  }, [dispatch, removeCookie, navigate]);
 
   const value = useMemo<AuthContextType>(
-    () => ({
-      isAuthenticated: !!getEffectiveToken(),
-      isLoading,
-      user,
-      token: getEffectiveToken(),
-      login,
-      logout,
-    }),
-    [isLoading, user, login, logout, cookies?.t]
+    () => ({ isAuthenticated, isLoading, user, token, login, logout }),
+    [isAuthenticated, isLoading, user, token, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

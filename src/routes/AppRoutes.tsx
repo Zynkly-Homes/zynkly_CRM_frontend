@@ -11,7 +11,9 @@ const LoginPage          = lazy(() => import("../pages/LoginPage").then(m => ({ 
 const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
 const CreatePasswordPage = lazy(() => import("../pages/CreatePasswordPage"));
 const DashboardPage      = lazy(() => import("../pages/dashboard-admin/DashboardPage").then(m => ({ default: m.DashboardPage })));
-const UserManagement     = lazy(() => import("../pages/user-management"));
+const SettingConfig      = lazy(() => import("../pages/setting-config"));
+const ApiKeyPage         = lazy(() => import("../pages/setting-config/ApiKeyPage"));
+const BookingPage        = lazy(() => import("../pages/booking-management"));
 const Course             = lazy(() => import("../pages/Course"));
 const NotFoundPage       = lazy(() => import("../pages/NotFoundPage"));
 
@@ -22,7 +24,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; moduleId?: string }>
   const { isAuthenticated, isLoading } = useAuth();
   const access = useSelector((s: any) => selectAccessData(s));
   const location = useLocation();
-  const navigate = useNavigate();
 
   const searchParams = new URLSearchParams(location.search);
   const mode = searchParams.get("mode");
@@ -58,51 +59,45 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const RedirectToHome: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAuth();
-  const user = useSelector((s: any) => s.user?.userData || s.user);
+  const user   = useSelector((s: any) => s.user?.userData || s.user);
   const access = useSelector((s: any) => selectAccessData(s));
 
   useEffect(() => {
     if (isLoading) return;
+    if (!isAuthenticated) { navigate("/login", { replace: true }); return; }
 
-    if (!isAuthenticated) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    const normalizedAccess: Record<string, any> = {};
+    const norm: Record<string, any> = {};
     Object.keys(access || {}).forEach(key => {
-      normalizedAccess[key.replace(/-/g, "").toLowerCase()] = access[key];
+      norm[key.replace(/-/g, "").replace(/_/g, "").toLowerCase()] = access[key];
     });
 
-    const roleName = (user?.role_name || user?.role || user?.role_id || user?.user_name || "").toLowerCase();
+    const roleName = (user?.role_name || user?.role || user?.user_name || "").toLowerCase();
 
-    if (normalizedAccess["dashboardxyz"]?.view) {
-      navigate("/dashboard-xyz", { replace: true });
-    } else if (normalizedAccess["dashboardadmin"]?.view) {
-      navigate("/dashboard-admin", { replace: true });
-    } else if (normalizedAccess["dashboardtso"]?.view) {
-      navigate("/dashboard-tso", { replace: true });
-    } else if (normalizedAccess["dashboardmanager"]?.view) {
-      navigate("/dashboard-manager", { replace: true });
-    } else if (normalizedAccess["dashboardteamleader"]?.view) {
-      navigate("/dashboard-team-leader", { replace: true });
-    } else if (normalizedAccess["dashboardbranchmanager"]?.view) {
-      navigate("/dashboard-branch-manager", { replace: true });
-    } else {
-      if (roleName.includes("tso")) {
-        navigate("/dashboard-tso", { replace: true });
-      } else if (roleName.includes("team") && roleName.includes("leader")) {
-        navigate("/dashboard-team-leader", { replace: true });
-      } else if (roleName.includes("manager")) {
-        navigate("/dashboard-manager", { replace: true });
-      } else {
-        navigate("/dashboard-admin", { replace: true });
-      }
+    if      (norm["dashboardxyz"]?.view)           navigate("/dashboard-xyz",            { replace: true });
+    else if (norm["dashboardadmin"]?.view)          navigate("/dashboard-admin",          { replace: true });
+    else if (norm["dashboardtso"]?.view)            navigate("/dashboard-tso",            { replace: true });
+    else if (norm["dashboardmanager"]?.view)        navigate("/dashboard-manager",        { replace: true });
+    else if (norm["dashboardteamleader"]?.view)     navigate("/dashboard-team-leader",    { replace: true });
+    else if (norm["dashboardbranchmanager"]?.view)  navigate("/dashboard-branch-manager", { replace: true });
+    else if (norm["usermanagement"]?.view)          navigate("/setting-config/user-management",    { replace: true });
+    else if (norm["rolemanagement"]?.view)          navigate("/setting-config/role-management",    { replace: true });
+    else if (norm["modulemanagement"]?.view)        navigate("/setting-config/module-management",  { replace: true });
+    else if (norm["apikeymangement"]?.view)         navigate("/setting-config/api-key-management", { replace: true });
+    else {
+      if      (roleName.includes("tso"))                                    navigate("/dashboard-tso",          { replace: true });
+      else if (roleName.includes("team") && roleName.includes("leader"))    navigate("/dashboard-team-leader",  { replace: true });
+      else if (roleName.includes("manager"))                                 navigate("/dashboard-manager",      { replace: true });
+      else                                                                   navigate("/setting-config/user-management", { replace: true });
     }
   }, [isAuthenticated, isLoading, user, access, navigate]);
 
   return null;
 };
+
+// ── Layout helper ──────────────────────────────────────────────────────────
+const InLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <DashboardLayout>{children}</DashboardLayout>
+);
 
 // ── AppRoutes ──────────────────────────────────────────────────────────────
 export const AppRoutes: React.FC = () => {
@@ -119,44 +114,81 @@ export const AppRoutes: React.FC = () => {
         {/* Root redirect */}
         <Route path="/" element={<ProtectedRoute><RedirectToHome /></ProtectedRoute>} />
 
-        {/* Dashboard */}
+        {/* Dashboards */}
         <Route path="/dashboard-admin"          element={<ProtectedRoute moduleId="data-dashboard"><DashboardPage /></ProtectedRoute>} />
         <Route path="/dashboard-tso"            element={<ProtectedRoute moduleId="dashboard-tso"><DashboardPage /></ProtectedRoute>} />
         <Route path="/dashboard-manager"        element={<ProtectedRoute moduleId="dashboard-manager"><DashboardPage /></ProtectedRoute>} />
         <Route path="/dashboard-team-leader"    element={<ProtectedRoute moduleId="dashboard-team-leader"><DashboardPage /></ProtectedRoute>} />
         <Route path="/dashboard-branch-manager" element={<ProtectedRoute moduleId="dashboard-branch-manager"><DashboardPage /></ProtectedRoute>} />
         <Route path="/dashboard-xyz"            element={<ProtectedRoute moduleId="dashboard-xyz"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/help-chat"                element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/help-chat"                element={<ProtectedRoute><DashboardLayout><DashboardPage /></DashboardLayout></ProtectedRoute>} />
 
-        {/* User Management */}
+        {/* Settings & Config — URM group (user/role/module) + API Key */}
         <Route
-          path="/user-management"
+          path="/setting-config/user-management"
           element={
-            <DashboardLayout>
-              <UserManagement />
-            </DashboardLayout>
+            <ProtectedRoute moduleId="user_management">
+              <InLayout><SettingConfig /></InLayout>
+            </ProtectedRoute>
           }
         />
+        <Route
+          path="/setting-config/role-management"
+          element={
+            <ProtectedRoute moduleId="role_management">
+              <InLayout><SettingConfig /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/setting-config/module-management"
+          element={
+            <ProtectedRoute moduleId="module_management">
+              <InLayout><SettingConfig /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/setting-config/api-key-management"
+          element={
+            <ProtectedRoute moduleId="api_key_management">
+              <InLayout><ApiKeyPage /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Booking Management */}
+        <Route
+          path="/booking-management"
+          element={
+            <ProtectedRoute moduleId="booking_management">
+              <InLayout><BookingPage /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Legacy redirect */}
+        <Route path="/user-management" element={<Navigate to="/setting-config/user-management" replace />} />
 
         {/* No Access */}
         <Route
           path="/no-access"
           element={
             <ProtectedRoute>
-              <DashboardLayout>
-                <div className="text-center py-10">
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">No Access</h1>
+              <InLayout>
+                <div className="text-center py-16">
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Access</h1>
                   <p className="text-gray-600 dark:text-gray-400">
                     You do not have permission to access this page. Please contact your administrator.
                   </p>
                 </div>
-              </DashboardLayout>
+              </InLayout>
             </ProtectedRoute>
           }
         />
 
         {/* 404 */}
-        <Route path="*" element={<DashboardLayout><NotFoundPage /></DashboardLayout>} />
+        <Route path="*" element={<InLayout><NotFoundPage /></InLayout>} />
       </Routes>
     </Suspense>
   );

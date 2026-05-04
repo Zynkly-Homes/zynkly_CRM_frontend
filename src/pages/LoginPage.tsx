@@ -47,11 +47,19 @@
 //   );
 // };
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useDispatch } from "react-redux";
 import { AuthLayout } from "../templates/AuthLayout";
 import { LoginForm } from "../organisms/LoginForm";
+import { clearApiKey } from "../store/slices/apiKeySlice";
 
 export const LoginPage: React.FC = () => {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(clearApiKey());
+  }, [dispatch]);
+
   return (
     <AuthLayout>
       <LoginForm />

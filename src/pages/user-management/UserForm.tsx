@@ -1,5 +1,4 @@
-//04-10-2025
-import React from "react";
+import React, { useMemo } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { MyInput } from "../../atoms/MyInput";
@@ -8,7 +7,21 @@ import { MyDropdown } from "../../atoms/MyDropdown";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, postData, patchData } from "../../services/crmServices";
 
-type RoleOption = { label: string; value: string };
+// ---- Types ----
+
+interface RoleOption { label: string; value: string }
+
+interface RolesApiItem { _id: string; role_name: string }
+interface RolesApiData { data: RolesApiItem[]; total: number }
+interface RolesApiResponse { success: boolean; data: RolesApiData }
+
+type UserFormValues = {
+  name: string;
+  email: string;
+  mobile_no: string;
+  password: string;
+  role_id: string;
+};
 
 type UserFormProps = {
   token?: string;
@@ -16,132 +29,101 @@ type UserFormProps = {
     _id?: string;
     name: string;
     email: string;
-    role_id: string;
-    status?: "Active" | "Inactive" | null;
+    mobile_no?: string;
+    role_id?: string;
   };
   onSuccess: () => void;
 };
 
+// ---- Helpers ----
+
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  const e = err as { error?: { response?: { data?: { message?: string } } }; message?: string };
+  return e?.error?.response?.data?.message ?? e?.message ?? "Operation failed";
+}
+
+async function fetchRolesOptions(token?: string): Promise<RoleOption[]> {
+  const res = await getData<RolesApiResponse>({
+    endpoint: "roles",
+    token,
+    instance: "identity",
+    params: { page: 1, limit: 100 },
+  });
+  return res.data.data.map((r) => ({ label: r.role_name, value: r._id }));
+}
+
+// ---- Component ----
+
 const UserForm: React.FC<UserFormProps> = ({ token, initialValues, onSuccess }) => {
+  const isEdit = !!initialValues?._id;
   const [roles, setRoles] = React.useState<RoleOption[]>([]);
   const [loadingRoles, setLoadingRoles] = React.useState(true);
 
-  const validationSchema = Yup.object({
-    name: Yup.string().trim().required("Name is required"),
-    email: Yup.string()
-      .email("Please enter a valid email address")
-      .required("Email is required"),
-    role_id: Yup.string().required("Role is required"),
-  });
-
-  const initialFormValues = {
-    name: initialValues?.name || "",
-    email: initialValues?.email || "",
-    role_id: initialValues?.role_id || "",
-    status: initialValues?.status || "Password Not set",
-  };
-
-  const fetchRoles = React.useCallback(async () => {
-    try {
-      setLoadingRoles(true);
-      
-      const res = await getData<any>({
-        endpoint: "role/getRolesList",
-        token,
-      });
-      
-      let rolesData: RoleOption[] = [];
-      
-      if (Array.isArray(res?.data)) {
-        rolesData = res.data;
-      } else if (Array.isArray(res)) {
-        rolesData = res;
-      } else if (res?.data && typeof res.data === 'object') {
-        rolesData = Object.entries(res.data).map(([value, label]) => ({
-          value,
-          label: String(label)
-        }));
-      }
-      
-      setRoles(rolesData);
-      
-      if (rolesData.length === 0) {
-        showToastnew.warning("No roles available");
-      }
-    } catch (e: any) {
-      console.error("Error fetching roles:", e);
-      setRoles([]);
-      showToastnew.error(e?.data?.message || "Failed to load roles");
-    } finally {
-      setLoadingRoles(false);
-    }
+  React.useEffect(() => {
+    setLoadingRoles(true);
+    fetchRolesOptions(token)
+      .then(setRoles)
+      .catch(() => showToastnew.error("Failed to load roles"))
+      .finally(() => setLoadingRoles(false));
   }, [token]);
 
-  React.useEffect(() => {
-    fetchRoles();
-  }, [fetchRoles]);
+  const validationSchema = useMemo(
+    () =>
+      Yup.object({
+        name: Yup.string().trim().required("Name is required"),
+        email: Yup.string().email("Invalid email address").required("Email is required"),
+        mobile_no: Yup.string(),
+        password: isEdit
+          ? Yup.string()
+          : Yup.string().required("Password is required").min(6, "Minimum 6 characters"),
+        role_id: Yup.string().required("Role is required"),
+      }),
+    [isEdit]
+  );
 
-  const checkEmailUnique = async (email: string): Promise<string | null> => {
-    if (!email || initialValues?._id) return null; // Skip check for existing users
-    
-    try {
-      const res = await getData<{ status?: boolean; message?: string }>({
-        endpoint: "crmAuth/checkEmail",
-        token,
-        params: { email },
-      });
-      
-      if (res?.status && res?.message === "Email Already Exists") {
-        return "User already exists with this email";
-      }
-      return null;
-    } catch (e: any) {
-      console.error("Email check error:", e);
-      return "Failed to verify email";
-    }
+  const initialFormValues: UserFormValues = {
+    name: initialValues?.name ?? "",
+    email: initialValues?.email ?? "",
+    mobile_no: initialValues?.mobile_no ?? "",
+    password: "",
+    role_id: initialValues?.role_id ?? "",
   };
 
-  const handleSubmit = async (values: any, { setSubmitting, setFieldError, resetForm }: any) => {
+  const handleSubmit = async (values: UserFormValues, { setSubmitting, resetForm }: { setSubmitting: (b: boolean) => void; resetForm: () => void }) => {
     try {
-      // Check email uniqueness for new users
-      if (!initialValues?._id) {
-        const emailError = await checkEmailUnique(values.email);
-        if (emailError) {
-          setFieldError("email", emailError);
-          setSubmitting(false);
-          return;
-        }
-      }
-
-      const payload = {
-        name: values.name.trim(),
-        email: values.email.toLowerCase().trim(),
-        role_id: values.role_id,
-        status: values.status,
-      };
-
-      if (initialValues?._id) {
+      if (isEdit) {
         await patchData({
-          endpoint: "crmAuth/updateUser",
+          endpoint: `users/${initialValues!._id}`,
           token,
-          params: { id: initialValues._id },
-          data: payload,
+          instance: "identity",
+          data: {
+            username: values.name.trim(),
+            email: values.email.toLowerCase().trim(),
+            mobile_no: values.mobile_no.trim(),
+            role_id: values.role_id,
+          },
         });
-        showToastnew.success("User Saved Successfully");
+        showToastnew.success("User updated successfully");
       } else {
         await postData({
-          endpoint: "crmAuth/createUser",
+          endpoint: "users",
           token,
-          data: payload,
+          instance: "identity",
+          data: {
+            username: values.name.trim(),
+            email: values.email.toLowerCase().trim(),
+            mobile_no: values.mobile_no.trim(),
+            password: values.password,
+            role_id: values.role_id,
+          },
         });
-        showToastnew.success("User saved Successfully");
+        showToastnew.success("User created successfully");
         resetForm();
       }
-      
       onSuccess();
-    } catch (e: any) {
-      console.error("Submit error:", e);
-      showToastnew.error(e?.data?.message || "Failed to save user");
+    } catch (err: unknown) {
+      showToastnew.error(extractErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -154,21 +136,12 @@ const UserForm: React.FC<UserFormProps> = ({ token, initialValues, onSuccess }) 
       enableReinitialize
       onSubmit={handleSubmit}
     >
-      {({
-        values,
-        errors,
-        touched,
-        handleChange,
-        handleBlur,
-        isSubmitting,
-        setFieldValue,
-        resetForm,
-      }) => (
+      {({ values, errors, touched, handleChange, handleBlur, isSubmitting, setFieldValue, resetForm }) => (
         <Form className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <MyInput
               label="Name"
-              placeholder="Enter Name"
+              placeholder="Enter full name"
               name="name"
               value={values.name}
               onChange={handleChange}
@@ -176,20 +149,44 @@ const UserForm: React.FC<UserFormProps> = ({ token, initialValues, onSuccess }) 
               error={touched.name ? errors.name : ""}
               required
             />
-            
+
             <MyInput
               label="Email"
               type="email"
-              placeholder="Enter Email"
+              placeholder="Enter email"
               name="email"
               value={values.email}
               onChange={handleChange}
               onBlur={handleBlur}
               error={touched.email ? errors.email : ""}
               required
-              disabled={!!initialValues?._id}
+              disabled={isEdit}
             />
-            
+
+            <MyInput
+              label="Mobile No"
+              placeholder="+91XXXXXXXXXX"
+              name="mobile_no"
+              value={values.mobile_no}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={touched.mobile_no ? errors.mobile_no : ""}
+            />
+
+            {!isEdit && (
+              <MyInput
+                label="Password"
+                type="password"
+                placeholder="Enter password"
+                name="password"
+                value={values.password}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                error={touched.password ? errors.password : ""}
+                required
+              />
+            )}
+
             <MyDropdown
               label="Role"
               name="role_id"
@@ -204,35 +201,13 @@ const UserForm: React.FC<UserFormProps> = ({ token, initialValues, onSuccess }) 
           </div>
 
           <div className="flex gap-3 pt-4">
-            <MyButton 
-              type="submit" 
-              variant="primary" 
-              isLoading={isSubmitting}
-              disabled={loadingRoles}
-            >
-              {initialValues?._id ? "Update User" : "Create User"}
+            <MyButton type="submit" variant="primary" isLoading={isSubmitting} disabled={loadingRoles}>
+              {isEdit ? "Update User" : "Create User"}
             </MyButton>
-            
-            <MyButton
-              type="button"
-              variant="outline"
-              onClick={() => resetForm()}
-              disabled={isSubmitting || loadingRoles}
-            >
+            <MyButton type="button" variant="outline" onClick={() => resetForm()} disabled={isSubmitting}>
               Reset
             </MyButton>
           </div>
-
-          {/* Debug info - remove in production */}
-          {/* {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs">
-              <div>Debug Info:</div>
-              <div>Roles loaded: {roles.length}</div>
-              <div>Selected Role: {values.role_id}</div>
-              <div>Loading Roles: {loadingRoles ? 'Yes' : 'No'}</div>
-              <div>Available Roles: {roles.map(r => r.label).join(', ') || 'None'}</div>
-            </div>
-          )} */}
         </Form>
       )}
     </Formik>

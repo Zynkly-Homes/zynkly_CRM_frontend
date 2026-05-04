@@ -23,10 +23,10 @@ type ModuleAccess = {
 type ModuleFromAPI = {
   _id: string;
   module_id: string;
-  label: string;
+  module_name: string;
+  is_active?: boolean;
   createdAt?: string;
   updatedAt?: string;
-  __v?: number;
 };
 
 type RoleFormProps = {
@@ -82,31 +82,23 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
   const [modules, setModules] = React.useState<ModuleFromAPI[]>([]);
   const [loadingModules, setLoadingModules] = React.useState(true);
 
-  // Fetch modules from API
+  // Fetch modules from identity API
   React.useEffect(() => {
     const fetchModules = async () => {
       try {
         setLoadingModules(true);
-        const response = await getData<any>({
+        const response = await getData<{
+          success: boolean;
+          data: { data: ModuleFromAPI[]; total: number };
+        }>({
           endpoint: "modules",
           token: cookies.t || token,
+          instance: "identity",
+          params: { page: 1, limit: 100 },
         });
-        
-        // Handle different response structures
-        let modulesData: ModuleFromAPI[] = [];
-        if (Array.isArray(response)) {
-          modulesData = response;
-        } else if (response?.data && Array.isArray(response.data)) {
-          modulesData = response.data;
-        } else if (response?.modules && Array.isArray(response.modules)) {
-          modulesData = response.modules;
-        }
-        
-        setModules(modulesData);
-      } catch (error) {
-        console.error("Failed to fetch modules:", error);
+        setModules(response?.data?.data ?? []);
+      } catch {
         showToastnew.error("Failed to load modules");
-        // Fallback to empty array or default modules if needed
         setModules([]);
       } finally {
         setLoadingModules(false);
@@ -145,12 +137,12 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
         initialValues?.role_access && initialValues.role_access.length > 0
           ? modules.map((m) => ({
               module_id: m.module_id,
-              label: m.label,
-              ...(initialValues.role_access?.find((r) => r.module_id === m.module_id) || {}),
+              label: m.module_name,
+              ...(initialValues.role_access?.find((r: { module_id: string }) => r.module_id === m.module_id) || {}),
             }))
           : modules.map((m) => ({
               module_id: m.module_id,
-              label: m.label,
+              label: m.module_name,
             }));
       return { role_name: roleName, role_access: roleAccess };
     }
@@ -174,7 +166,7 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
           export: !!r.export,
         })),
       };
-      const res = await postData({ endpoint: "role/create", token: cookies.t || token, data: payload });
+      const res = await postData({ endpoint: "roles", token: cookies.t || token, instance: "identity", data: payload });
       showToastnew.success("Role Created Successfully");
       resetForm();
       onSuccess();
@@ -210,8 +202,9 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
       // });
       
       await patchData({
-        endpoint: `role/updateRole/${initialValues?._id}`,
+        endpoint: `roles/${initialValues?._id}`,
         token: cookies.t || token,
+        instance: "identity",
         data: payload,
       });
       showToastnew.success("Role Saved Successfully");

@@ -1,58 +1,52 @@
 import type { AxiosInstance, AxiosError } from "axios";
+import { store } from "../store";
+import { clearUserData } from "../store/slices/userSlice";
+import { clearAccessData } from "../store/slices/accessSlice";
+import { clearApiKey } from "../store/slices/apiKeySlice";
 
 const LOGIN_PATH = "/login";
 
-function logUnauthorize() {
-  console.log("aunautorise");
-}
-
-function clearClientAuthState() {
+export function clearClientAuthState() {
   try {
-    // remove localStorage keys actually used by your app
-    localStorage.removeItem("auth_token");        // <- match TOKEN_KEY
-    localStorage.removeItem("auth_user_storage"); // <- match USER_KEY
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user_storage");
     localStorage.removeItem("countdownStartTime");
-
-    // remove cookies: try both document.cookie & react-cookie removal on app logout
-    document.cookie = "t=; Max-Age=0; path=/;";        // token cookie
+    document.cookie = "t=; Max-Age=0; path=/;";
     document.cookie = "auth_user=; Max-Age=0; path=/;";
     document.cookie = "uid=; Max-Age=0; path=/;";
     document.cookie = "email=; Max-Age=0; path=/;";
-  } catch (e) {
-    // ignore
+  } catch {
+    // ignore DOM errors
   }
 }
 
-function redirectToLogin() {
+export function clearReduxAuthState() {
+  store.dispatch(clearUserData());
+  store.dispatch(clearAccessData());
+  store.dispatch(clearApiKey());
+}
+
+export function redirectToLogin() {
   try {
     window.location.replace(LOGIN_PATH);
-  } catch (e) {
+  } catch {
     window.location.href = LOGIN_PATH;
   }
 }
 
 export function attachAuthInterceptor(instance: AxiosInstance) {
   instance.interceptors.response.use(
-    resp => resp,
+    (resp) => resp,
     (error: AxiosError) => {
       if (!error.response) return Promise.reject(error);
 
-      const status = error.response.status;
-
-      if (status === 401) {
-        try {
-          const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-          if (!currentPath.startsWith(LOGIN_PATH)) {
-            logUnauthorize();
-            clearClientAuthState();
-            redirectToLogin();
-          }
-        } catch (e) {
-          logUnauthorize();
+      if (error.response.status === 401) {
+        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+        if (!currentPath.startsWith(LOGIN_PATH)) {
           clearClientAuthState();
+          clearReduxAuthState();
           redirectToLogin();
         }
-        return Promise.reject(error);
       }
 
       return Promise.reject(error);

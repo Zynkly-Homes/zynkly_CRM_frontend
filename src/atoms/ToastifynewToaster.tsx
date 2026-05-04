@@ -8,7 +8,7 @@ export const ToastifynewToaster: React.FC = () => {
 
   return (
     <ToastContainer
-      position="top-right" //  Ideal toast position
+      position="top-right"
       autoClose={4000}
       hideProgressBar={true}
       newestOnTop={true}
@@ -17,8 +17,8 @@ export const ToastifynewToaster: React.FC = () => {
       pauseOnFocusLoss={false}
       draggable={true}
       pauseOnHover={true}
+      style={{ zIndex: 999999 }}
       // theme={isDarkMode ? "dark" : "light"}
-      
     />
     
     
