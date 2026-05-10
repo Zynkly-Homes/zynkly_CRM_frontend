@@ -2,9 +2,10 @@ import React from "react";
 
 // ── Nav ────────────────────────────────────────────────────────────────────
 export interface NavItemType {
+  kind?: "group" | "item"; // "group" renders a bold section header, "item" (default) is a link/button
   name: string;
   href?: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>; // optional: group headers have no icon
   children?: NavItemType[];
 }
 

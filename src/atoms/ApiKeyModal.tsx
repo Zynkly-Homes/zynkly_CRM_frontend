@@ -23,11 +23,10 @@ const ApiKeyModal: React.FC = () => {
   const isOpen = useSelector(selectApiKeyModalOpen);
   const isInvalid = useSelector(selectApiKeyIsInvalid);
   const limitExceeded = useSelector(selectApiKeyLimitExceeded);
-
-  if (isAuthRoute(pathname)) return null;
-
   const [inputValue, setInputValue] = useState("");
   const [error, setError] = useState("");
+
+  if (isAuthRoute(pathname)) return null;
 
   const handleSave = () => {
     if (!inputValue.trim()) {

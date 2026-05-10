@@ -2,21 +2,374 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --sc-light-bg-shell:   #f4f4f5;
-  --sc-light-bg-card:    #ffffff;
-  --sc-light-bg-surface: #f9fafb;
-  --sc-light-border:     #e4e4e7;
-  --sc-dark-bg-sidebar:  #1e1e1e;
-  --sc-dark-bg-elevated: #252526;
+/* ═══════════════════════════════════════════════════════════════════════════
+   iOS / PWA FOUNDATION  —  must come before everything else
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+html {
+  /* Prevent iOS from resizing fonts in landscape */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+
+  /* Smooth font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Fill the full screen including notch / home indicator areas */
+  height: 100%;
+  height: -webkit-fill-available; /* iOS Safari fallback */
 }
 
-.sc-scrollbar::-webkit-scrollbar              { width: 4px; }
-.sc-scrollbar::-webkit-scrollbar-track        { background: transparent; }
-.sc-scrollbar::-webkit-scrollbar-thumb        { background: rgba(0,0,0,0.15); border-radius: 2px; }
-.dark .sc-scrollbar::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); }
+body {
+  height: 100%;
+  height: -webkit-fill-available;
 
-.globalPadding { padding: 24px; }
+  /* Prevent body-level rubber-band overscroll (the app manages scroll internally) */
+  overscroll-behavior: none;
+
+  /* Match shell background so notch / Dynamic Island area shows the right color */
+  background-color: var(--sc-shell, #ffffff);
+
+  /* Prevent text selection highlight on tap for UI elements */
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  height: 100%;
+  height: -webkit-fill-available;
+  isolation: isolate;
+}
+
+/* Universal touch improvements */
+* {
+  /* Removes 300ms tap delay on iOS (modern iOS has it off, this ensures it) */
+  touch-action: manipulation;
+  /* Remove tap flash on every element */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Allow text selection only in explicit content areas */
+p, span, td, th, li, h1, h2, h3, h4, h5, h6, pre, code, blockquote {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* UI chrome should never be selectable */
+button, nav, header, aside, label, [role="button"], [role="tab"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ── Input zoom prevention on iOS Safari ────────────────────────────────────
+   iOS Safari zooms the viewport when focusing an input with font-size < 16px.
+   @supports (-webkit-touch-callout: none) targets iOS/iPadOS exclusively —
+   it does NOT match Android Chrome or desktop Safari.
+   ──────────────────────────────────────────────────────────────────────────── */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]):not([type="button"]),
+  textarea,
+  select {
+    font-size: 16px !important; /* iOS minimum to prevent auto-zoom */
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL DESIGN TOKENS  —  Single source of truth for the entire platform.
+   DeepSeek-exact palette — change one var → whole platform updates.
+   Light: :root   Dark: .dark on <html>   (toggled by useDarkMode hook)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Modal background ────────────────────────────────────────────────── */
+  --modal-bg: #ffffff;
+
+  /* ── Shell — DashboardLayout outer container ─────────────────────────── */
+  --sc-shell:      #ffffff;    /* light gray gutter between panels            */
+  --sc-card:       #ffffff;    /* main content panel — pure white             */
+  --sc-surface:    #f5f5f5;    /* recessed surfaces, toolbar bg               */
+  --sc-border:     #e5e5e5;    /* card outlines, dividers                     */
+
+  /* ── Sidebar ─────────────────────────────────────────────────────────── */
+  --sb-bg:          #ffffff;
+  --sb-elevated:    #ffffff;
+  --sb-hover:       #f5f5f5;
+  --sb-active:      #ebebeb;
+  --sb-text:        #1f1f1f;
+  --sb-text-dim:    #737373;
+  --sb-text-active: #0d0d0d;
+  --sb-border:      #e5e5e5;
+
+  /* ── Form / Input atoms ─────────────────────────────────────────────── */
+  --fi-bg:           #ffffff;
+  --fi-bg-panel:     #ffffff;
+  --fi-border:       #e5e5e5;
+  --fi-border-focus: #0d0d0d;
+  --fi-border-error: #ef4444;
+  --fi-text:         #0d0d0d;
+  --fi-muted:        #9e9e9e;
+  --fi-label:        #4b4b4b;
+  --fi-height:       32px;
+  --fi-radius:       7px;
+  --fi-font-size:    13px;
+  --fi-shadow-focus: 0 0 0 2px rgba(13,13,13,0.10);
+
+  /* ── Button primary token ────────────────────────────────────────────── */
+  --btn-primary-bg:   #111111;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover:#2a2a2a;
+
+  /* ── Badge color tokens ─────────────────────────────────────────────── */
+  --badge-purple-bg:    #ede9fe;   --badge-purple-text:  #4c1d95;
+  --badge-green-bg:     #dcfce7;   --badge-green-text:   #166534;
+  --badge-gray-bg:      #f3f4f6;   --badge-gray-text:    #374151;
+  --badge-amber-bg:     #fef3c7;   --badge-amber-text:   #92400e;
+  --badge-orange-bg:    #fff7ed;   --badge-orange-text:  #9a3412;
+  --badge-red-bg:       #fee2e2;   --badge-red-text:     #991b1b;
+  --badge-blue-bg:      #dbeafe;   --badge-blue-text:    #1e40af;
+
+  /* ── DataTable ───────────────────────────────────────────────────────── */
+  --dt-bg:              #ffffff;
+  --dt-header:          #fafafa;
+  --dt-hover:           #f5f5f5;
+  --dt-header-hover:    #efefef;
+  --dt-border:          #e5e5e5;
+  --dt-border-strong:   #c8c8c8;
+  --dt-text:            #0d0d0d;
+  --dt-dim:             #4b4b4b;
+  --dt-muted:           #9e9e9e;
+  --dt-accent:          #1f1f1f;
+  --dt-scrollbar:       rgba(0, 0, 0, 0.15);
+  --dt-scrollbar-hover: rgba(0, 0, 0, 0.28);
+  --dt-skeleton-from:   #eeeeee;
+  --dt-skeleton-to:     #e0e0e0;
+}
+
+/* Dark mode — exact DeepSeek palette ─────────────────────────────────────── */
+.dark {
+  /* ── Modal background — ChatGPT-style comfortable dark ───────────────── */
+  /* --modal-bg: #212121; */
+  --modal-bg:#0e0e0e;
+
+  /* ── Shell ───────────────────────────────────────────────────────────── */
+  --sc-shell:      #0d0d0d;
+  --sc-card:       #141414;
+  --sc-surface:    #1a1a1a;
+  --sc-border:     #2a2a2a;
+
+  /* ── Sidebar ─────────────────────────────────────────────────────────── */
+  --sb-bg:          #1c1c1c;
+  --sb-elevated:    #1a1a1a;
+  --sb-hover:       #1e1e1e;
+  --sb-active:      #262626;
+  --sb-text:        #e5e5e5;
+  --sb-text-dim:    #737373;
+  --sb-text-active: #ffffff;
+  --sb-border:      #2a2a2a;
+
+  /* ── Form / Input atoms (dark) — ChatGPT-style, no focus ring ──────── */
+  --fi-bg:           #2f2f2f;              /* ChatGPT-match input background        */
+  --fi-bg-panel:     var(--modal-bg);      /* panel behind inputs = modal bg        */
+  --fi-border:       #3d3d3d;              /* subtle border                         */
+  --fi-border-focus: #3d3d3d;              /* SAME — no highlight on focus          */
+  --fi-border-error: #f87171;
+  --fi-text:         #ececec;              /* near-white for readability            */
+  --fi-muted:        #6b6b6b;
+  --fi-label:        #b0b0b0;              /* lighter labels for dark bg            */
+  --fi-height:       32px;
+  --fi-radius:       7px;
+  --fi-font-size:    13px;
+  --fi-shadow-focus: 0 0 0 0 transparent; /* no glow ring — clean flat focus       */
+
+  /* ── Button primary token (dark) ─────────────────────────────────────── */
+  --btn-primary-bg:   #ffffff;
+  --btn-primary-text: #111111;
+  --btn-primary-hover:#f0f0f0;
+
+  /* ── Badge color tokens (dark) ─────────────────────────────────────── */
+  --badge-purple-bg:    rgba(167,139,250,0.15);  --badge-purple-text:  #c4b5fd;
+  --badge-green-bg:     rgba(34,197,94,0.12);    --badge-green-text:   #86efac;
+  --badge-gray-bg:      rgba(255,255,255,0.08);  --badge-gray-text:    #e0e0e0;
+  --badge-amber-bg:     rgba(245,158,11,0.15);   --badge-amber-text:   #fcd34d;
+  --badge-orange-bg:    rgba(249,115,22,0.15);   --badge-orange-text:  #fdba74;
+  --badge-red-bg:       rgba(239,68,68,0.15);    --badge-red-text:     #fca5a5;
+  --badge-blue-bg:      rgba(59,130,246,0.15);   --badge-blue-text:    #93c5fd;
+
+  /* ── DataTable — exact DeepSeek dark ────────────────────────────────── */
+  --dt-bg:              #1c1c1c;
+  --dt-header:          #1a1a1a;
+  --dt-hover:           #1e1e1e;
+  --dt-header-hover:    #222222;
+  --dt-border:          #2a2a2a;
+  --dt-border-strong:   #3a3a3a;
+  --dt-text:            #e5e5e5;
+  --dt-dim:             #a3a3a3;
+  --dt-muted:           #737373;
+  --dt-accent:          #f0f0f0;
+  --dt-scrollbar:       rgba(255, 255, 255, 0.12);
+  --dt-scrollbar-hover: rgba(255, 255, 255, 0.22);
+  --dt-skeleton-from:   #1e1e1e;
+  --dt-skeleton-to:     #2a2a2a;
+}
+
+/* Dark mode: override body background to match shell */
+.dark body {
+  background-color: #0d0d0d; /* var(--sc-shell) in dark */
+}
+
+/* ── Dashboard layout shell ─────────────────────────────────────────────────
+   Safe-area-aware padding.
+   Uses env(safe-area-inset-*) which is populated by viewport-fit=cover.
+   On devices without a notch/home-indicator the values are 0 → falls back to
+   the 6px desktop gutter naturally.
+   ──────────────────────────────────────────────────────────────────────────── */
+.dashboard-shell {
+  /* Height: 100dvh = dynamic viewport height (shrinks when Safari shows its
+     address bar) — exactly what we want so content is never hidden.
+     Falls back through svh → dvh for slightly older Safari. */
+  height: 100svh;
+  height: 100dvh;
+
+  /* Safe-area-aware padding: at least 6px + the notch/home-indicator inset */
+  padding: max(6px, calc(env(safe-area-inset-top)    + 2px))
+           max(6px, calc(env(safe-area-inset-right)  + 2px))
+           max(6px, calc(env(safe-area-inset-bottom) + 2px))
+           max(6px, calc(env(safe-area-inset-left)   + 2px));
+}
+
+/* Mobile: go edge-to-edge horizontally, keep vertical safe areas */
+@media (max-width: 1023px) {
+  .dashboard-shell {
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+  }
+}
+
+/* ── Content card on mobile: remove card chrome for edge-to-edge feel ─────── */
+@media (max-width: 1023px) {
+  .content-card {
+    border-radius: 0 !important;
+    border-left:   none !important;
+    border-right:  none !important;
+  }
+}
+
+/* ── Scrollbar utility — mirrors the DataTable cdg-scroll exactly ──────── */
+/* Firefox */
+.sc-scrollbar { scrollbar-width: thin; scrollbar-color: var(--dt-scrollbar) transparent; }
+/* WebKit (desktop) — hidden on iOS, native momentum scroll is used instead */
+.sc-scrollbar::-webkit-scrollbar              { width: 5px; height: 5px; }
+.sc-scrollbar::-webkit-scrollbar-track        { background: transparent; }
+.sc-scrollbar::-webkit-scrollbar-thumb        { background: var(--dt-scrollbar); border-radius: 3px; }
+.sc-scrollbar::-webkit-scrollbar-thumb:hover  { background: var(--dt-scrollbar-hover); }
+.sc-scrollbar::-webkit-scrollbar-corner       { background: transparent; }
+
+/* iOS momentum scroll + contain overscroll so the page never rubber-bands */
+.sc-scrollbar {
+  -webkit-overflow-scrolling: touch; /* legacy, harmless on modern iOS     */
+  overscroll-behavior:        contain;
+  /* GPU layer — prevents checkerboard flicker during fast scroll on iOS   */
+  will-change: scroll-position;
+}
+
+/* ── Thin scrollbar on all textarea elements ────────────────────────────── */
+textarea { scrollbar-width: thin; scrollbar-color: var(--dt-scrollbar) transparent; }
+textarea::-webkit-scrollbar              { width: 5px; }
+textarea::-webkit-scrollbar-track        { background: transparent; }
+textarea::-webkit-scrollbar-thumb        { background: var(--dt-scrollbar); border-radius: 3px; }
+textarea::-webkit-scrollbar-thumb:hover  { background: var(--dt-scrollbar-hover); }
+
+/* ── Responsive 2-col form grid — auto-stacks to 1-col on mobile ────────── */
+.form-grid      { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid-full { grid-column: 1 / -1; }
+@media (max-width: 1023px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .form-grid-full { grid-column: 1; }
+}
+
+.globalPadding { padding: 0px; }
 @media (max-width: 768px) { .globalPadding { padding: 16px; } }
 
-.finbros-gradient { background: linear-gradient(135deg, #f8f9ff 0%, #f0f1ff 100%); }
+/* ── Dashboard layout helpers ────────────────────────────────────────────────
+   dash-body      — scrollable content region, flex-col with consistent gap
+   stat-grid-6    — 6-card row: 3 cols → 2 → 1 on mobile
+   stat-grid-4    — 4-card row: 4 cols → 2 → 1 on mobile
+   chart-pair     — 2 charts; 1-col when sidebar is open, 2-col when closed
+                    (auto-fit with 560px min — threshold sits between the two
+                     sidebar widths on a 1366px viewport)
+   chart-duo      — standard responsive 2-col chart row
+   ──────────────────────────────────────────────────────────────────────────── */
+.dash-body {
+  display:        flex;
+  flex-direction: column;
+  gap:            12px;
+  padding:        14px;
+}
+@media (max-width: 640px) {
+  .dash-body { padding: 10px; gap: 10px; }
+}
+
+.stat-grid { display: grid; gap: 10px; }
+
+.stat-grid-6 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 960px) { .stat-grid-6 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .stat-grid-6 { grid-template-columns: 1fr; } }
+
+.stat-grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .stat-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .stat-grid-4 { grid-template-columns: 1fr; } }
+
+/* Adaptive: collapses to 1-col when content < 1120px (sidebar open),
+   expands to 2-col when content ≥ 1120px (sidebar collapsed / wide screen) */
+.chart-pair {
+  display:               grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr));
+  gap:                   12px;
+}
+
+/* Standard fluid 2-col chart row */
+.chart-duo {
+  display:               grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap:                   12px;
+}
+
+/* ── iOS keyboard / bottom-sheet safe area helper ────────────────────────── */
+/* Adds env(safe-area-inset-bottom) above any fixed/sticky bottom element    */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── GPU-friendly animations (avoids triggering layout on iOS) ───────────── */
+/* Use only transform + opacity for animations to stay on the compositor thread */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-slide-up {
+    animation: slide-up 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  @keyframes slide-up {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+}
+
+/* ── Prevent horizontal overflow that causes iOS Safari to scroll right ──── */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* ── iOS modal / sheet body-scroll lock ─────────────────────────────────── */
+/* Applied programmatically by CleanModal when open on iOS */
+.ios-scroll-locked {
+  position: fixed;
+  width: 100%;
+  /* preserve scroll position via top (set by JS) */
+}
+
+/* ── Touch-friendly minimum tap targets ─────────────────────────────────── */
+/* Apple HIG minimum: 44×44pt. Applied on mobile where finger is the pointer  */
+@media (max-width: 1023px) and (pointer: coarse) {
+  button:not(.no-min-tap),
+  [role="button"]:not(.no-min-tap) {
+    min-height: 44px;
+    min-width:  44px;
+  }
+}

@@ -158,7 +158,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
                   fontFamily: "inherit", // uses whatever global font is set
                 }}
               >
-                Succesly
+                Zynkly
               </span>
             </div>
 

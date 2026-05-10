@@ -1,66 +1,105 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
-import { clsx } from "clsx";
+import { Link } from "react-router-dom";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import { NavItemProps } from "../../types";
+import { emitNavStart } from "../../../../atoms/NavigationProgress";
 
-const PRIMARY = "#4550E6";
-const PRIMARY_BG_LIGHT = "rgba(69,80,230,0.08)";
-
-// ── Icon always in a fixed-width container → same X position collapsed or expanded
-const NavIcon: React.FC<{
-  Icon: React.ComponentType<{ className?: string }>;
-}> = ({ Icon }) => (
-  <span className="w-10 flex items-center justify-center flex-shrink-0">
-    <Icon className="h-5 w-5" />
+// ── Icon — muted gray, does not inherit text color so it stays subtle
+// even when the label is dark/active. Matches Dunwork's icon treatment.
+const NavIcon: React.FC<{ Icon: React.ComponentType<{ className?: string }>; isActive: boolean }> = ({ Icon, isActive }) => (
+  <span
+    style={{
+      width: 18,
+      height: 18,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+      color: isActive ? "var(--sb-text)" : "var(--sb-text-dim)",
+      transition: "color 140ms ease",
+    }}
+  >
+    <Icon className="w-[14px] h-[14px]" />
   </span>
 );
 
-// ── NavChevron ─────────────────────────────────────────────────────────────
-const NavChevron: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => (
-  <span className={clsx("ml-auto text-xs transition-transform duration-200", isOpen && "rotate-180")}>
-    ▼
-  </span>
-);
-
-// ── Shared wrapper class — px-3 always so icon X position never changes ───
-const itemClass = (isActive: boolean, level: number) =>
-  clsx(
-    "flex items-center w-full px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150",
-    isActive
-      ? "dark:text-[#a5abf8]"
-      : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800/70 hover:text-gray-900 dark:hover:text-slate-200",
-    level > 0 && "pl-3"
-  );
+const itemStyle = (isActive: boolean, level: number): React.CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  width: "100%",
+  padding: level > 0 ? "3px 6px 3px 4px" : "4px 8px",
+  gap: 6,
+  borderRadius: 5,
+  fontSize: 13,
+  fontWeight: 400,
+  cursor: "pointer",
+  transition: "background 120ms ease",
+  background: isActive ? "var(--sb-active)" : "transparent",
+  color: isActive ? "var(--sb-text-active)" : "var(--sb-text)",
+  border: "none",
+  textDecoration: "none",
+  boxSizing: "border-box",
+  lineHeight: 1.3,
+});
 
 // ── NavLinkItem ────────────────────────────────────────────────────────────
 const NavLinkItem: React.FC<NavItemProps> = ({ item, isCollapsed, isActive, level = 0, onClick }) => (
   <Link
     to={item.href!}
-    onClick={onClick}
+    onClick={() => { emitNavStart(); onClick?.(); }}
     title={isCollapsed ? item.name : undefined}
-    className={itemClass(isActive, level)}
-    style={isActive ? { backgroundColor: PRIMARY_BG_LIGHT, color: PRIMARY } : undefined}
+    style={{
+      ...itemStyle(!!isActive, level),
+      justifyContent: isCollapsed ? "center" : "flex-start",
+    }}
+    onMouseEnter={e => {
+      if (!isActive) {
+        (e.currentTarget as HTMLElement).style.background = "var(--sb-hover)";
+      }
+    }}
+    onMouseLeave={e => {
+      if (!isActive) {
+        (e.currentTarget as HTMLElement).style.background = "transparent";
+      }
+    }}
   >
-    <NavIcon Icon={item.icon} />
+    {item.icon && <NavIcon Icon={item.icon} isActive={!!isActive} />}
     {!isCollapsed && (
-      <span className="flex-1 truncate text-left leading-none">{item.name}</span>
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.name}
+      </span>
     )}
   </Link>
 );
 
-// ── NavButtonItem ──────────────────────────────────────────────────────────
+// ── NavButtonItem — for items with children (accordion) ───────────────────
 const NavButtonItem: React.FC<NavItemProps> = ({ item, isCollapsed, level = 0, isOpen, onToggle }) => (
   <button
     onClick={onToggle}
     title={isCollapsed ? item.name : undefined}
-    className={itemClass(false, level)}
+    style={{
+      ...itemStyle(false, level),
+      justifyContent: isCollapsed ? "center" : "flex-start",
+    }}
     aria-expanded={isOpen}
+    onMouseEnter={e => {
+      e.currentTarget.style.background = "var(--sb-hover)";
+    }}
+    onMouseLeave={e => {
+      e.currentTarget.style.background = "transparent";
+    }}
   >
-    <NavIcon Icon={item.icon} />
+    {item.icon && <NavIcon Icon={item.icon} isActive={false} />}
     {!isCollapsed && (
       <>
-        <span className="flex-1 truncate text-left leading-none">{item.name}</span>
-        {!!item.children?.length && <NavChevron isOpen={isOpen} />}
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+          {item.name}
+        </span>
+        {!!item.children?.length && (
+          isOpen
+            ? <ChevronDown className="w-[14px] h-[14px] flex-shrink-0" style={{ color: "var(--sb-text-dim)" }} />
+            : <ChevronRight className="w-[14px] h-[14px] flex-shrink-0" style={{ color: "var(--sb-text-dim)" }} />
+        )}
       </>
     )}
   </button>

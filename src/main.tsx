@@ -10,6 +10,21 @@ import { AuthProvider } from "./context/AuthContext";
 import Errorboundary from "./services/errorBoundarry";
 import "./index.css";
 
+// ── PWA Service Worker registration ────────────────────────────────────────
+// Only registered in production builds (Vite sets import.meta.env.PROD).
+// In development the SW is skipped so HMR works normally.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then((reg) => {
+        // Check for SW updates every 60 minutes
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+      })
+      .catch((err) => console.warn("[SW] registration failed:", err));
+  });
+}
+
 
 // Define your routes (simple wrapper for now, can be expanded)
 const router = createBrowserRouter([

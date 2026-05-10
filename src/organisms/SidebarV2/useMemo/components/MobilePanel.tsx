@@ -13,15 +13,15 @@ interface MobilePanelProps extends Omit<UserProfileProps, "isCollapsed"> {
 
 // ── MobilePanelHeader ──────────────────────────────────────────────────────
 const MobilePanelHeader: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-  <div className="p-4 flex items-center justify-between border-b border-gray-100 dark:border-white/[0.07]">
-    {/* <img src={finbrosLogoLight} alt="FinBros Logo" className="w-40 h-12 object-contain block dark:hidden" /> */}
-    {/* <img src={finbrosLogoDark}  alt="FinBros Logo" className="w-40 h-12 object-contain hidden dark:block" /> */}
+  <div style={{ padding: "12px 12px", display: "flex", alignItems: "center", justifyContent: "flex-end", borderBottom: "1px solid var(--sb-border)" }}>
     <button
       onClick={onClose}
       aria-label="Close menu"
-      className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+      style={{ padding: 6, borderRadius: "50%", border: "none", background: "transparent", cursor: "pointer", color: "var(--sb-text)", display: "flex", alignItems: "center", justifyContent: "center" }}
+      onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-hover)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
     >
-      <X className="h-5 w-5 text-gray-700 dark:text-gray-200" />
+      <X style={{ width: 18, height: 18 }} />
     </button>
   </div>
 );
@@ -55,24 +55,32 @@ const MobilePanel: React.FC<MobilePanelProps> = ({
 
       {/* Slide panel */}
       <div
-        className="fixed top-0 left-0 h-full w-80 bg-white dark:bg-[var(--sc-dark-bg-sidebar)] border-r border-gray-200 dark:border-white/[0.07]"
         style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          height: "100%",
           minHeight: "100dvh",
+          width: 280,
+          background: "var(--sb-bg)",
+          borderRight: "1px solid var(--sb-border)",
           zIndex: Z_INDEX.SIDEBAR,
           transform: expanded ? "translateX(0)" : "translateX(-100%)",
           transition: TRANSITIONS.MOBILE,
           willChange: "transform",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <div className="flex flex-col h-full">
-          <MobilePanelHeader onClose={onClose} />
+        <MobilePanelHeader onClose={onClose} />
 
-          <nav className="mt-2 flex-1 overflow-auto">
-            <ul className="space-y-1 px-3 pb-4">{children}</ul>
-          </nav>
+        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px 16px" }} className="sc-scrollbar">
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            {children}
+          </ul>
+        </nav>
 
-          <UserProfile isCollapsed={false} {...profileProps} />
-        </div>
+        <UserProfile isCollapsed={false} {...profileProps} />
       </div>
     </>
   );

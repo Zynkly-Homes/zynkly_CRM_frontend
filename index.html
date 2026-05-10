@@ -1,13 +1,76 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Succesly Admin — manage leads, users, and platform settings." />
-  <meta name="theme-color" content="#4550E6" />
 
-  <!-- Preconnect to font origins -->
+  <!--
+    viewport-fit=cover  → content extends behind notch / Dynamic Island / home indicator
+    The app itself pads away from those edges using env(safe-area-inset-*)
+  -->
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
+
+  <!-- ── SEO / Description ─────────────────────────────────────────────── -->
+  <meta name="description" content="Zynkly Admin — manage bookings, users, and platform settings." />
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- ── PWA Manifest ──────────────────────────────────────────────────── -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- ── Theme color: updates via JS (useDarkMode) for dark/light switch ─ -->
+  <!-- Light theme (default) -->
+  <meta name="theme-color" id="theme-color-meta" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <!-- Dark theme -->
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
+
+  <!-- ── Apple / iOS PWA meta ──────────────────────────────────────────── -->
+  <!-- Enables standalone (full-screen) mode when added to Home Screen     -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <!-- black-translucent → status bar overlays the app; we pad with safe-area -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="NP Admin" />
+
+  <!-- Prevent iOS from auto-linking phone numbers, dates, addresses -->
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+
+  <!-- ── Apple Touch Icons (PNG required — see /public/icons/ README) ─── -->
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-icon-120.png" />
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-touch-icon-152.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+
+  <!-- ── Favicon ────────────────────────────────────────────────────────── -->
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32"  href="/icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16"  href="/icons/favicon-16.png" />
+
+  <!--
+    ── iOS Splash Screens ────────────────────────────────────────────────
+    Apple requires static splash images for each device resolution.
+    Generate them with: npx pwa-asset-generator /public/icons/icon.svg /public/splash
+    Then replace these placeholder paths with your generated images.
+    See: https://github.com/elegantapp/pwa-asset-generator
+  -->
+  <!-- iPhone SE (2nd/3rd gen) — 750×1334 @2x -->
+  <link rel="apple-touch-startup-image" href="/splash/splash-750x1334.png"
+        media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+  <!-- iPhone 12 / 13 / 14 — 1170×2532 @3x -->
+  <link rel="apple-touch-startup-image" href="/splash/splash-1170x2532.png"
+        media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+  <!-- iPhone 14 Pro / 15 / 15 Pro — 1179×2556 @3x -->
+  <link rel="apple-touch-startup-image" href="/splash/splash-1179x2556.png"
+        media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+  <!-- iPhone 14 Plus / 15 Plus / 15 Pro Max — 1290×2796 @3x -->
+  <link rel="apple-touch-startup-image" href="/splash/splash-1290x2796.png"
+        media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+  <!-- iPhone 13 Pro Max / 14 Plus — 1284×2778 @3x -->
+  <link rel="apple-touch-startup-image" href="/splash/splash-1284x2778.png"
+        media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+
+  <!-- ── Preconnect for fonts ───────────────────────────────────────────── -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
@@ -19,13 +82,12 @@
     onload="this.onload=null;this.rel='stylesheet'"
   />
   <noscript>
-    <link
-      rel="stylesheet"
+    <link rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@200;300;400;500;600&display=swap"
     />
   </noscript>
 
-  <title>learing </title>
+  <title>Zynkly Admin</title>
 </head>
 
 <body>

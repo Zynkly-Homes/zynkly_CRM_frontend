@@ -6,7 +6,6 @@ import { selectAccessData } from "../../store/slices/accessSlice";
 import UserManagementList from "../user-management/UserManagementList";
 import RoleManagement from "../user-management/RoleManagement";
 import ModuleManagement from "./ModuleManagement";
-import { COLORS } from "../../theme/colors";
 
 const TABS = [
   { label: "User Management",   path: "/setting-config/user-management",   moduleKey: "user_management"   },
@@ -34,35 +33,49 @@ const SettingConfig: React.FC = () => {
   );
 
   return (
-    <div className="globalPadding">
-      <div className="flex items-center gap-4 mb-4">
-        <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
-          <Settings className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{activeLabel}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Manage your {activeLabel.toLowerCase()} and configurations
-          </p>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--dt-bg)" }}>
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 10, padding: "8px 14px", borderBottom: "1px solid var(--sc-border)",
+        flexShrink: 0, background: "var(--sc-card)", flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 7,
+            background: "rgba(99,102,241,0.12)",
+            display: "flex", alignItems: "center", justifyContent: "center", color: "#6366f1",
+          }}>
+            <Settings size={15} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dt-text)", lineHeight: 1.2 }}>{activeLabel}</div>
+            <div style={{ fontSize: 11, color: "var(--dt-muted)" }}>Manage {activeLabel.toLowerCase()} and configurations</div>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 mb-4">
+      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", flexWrap: "wrap", gap: 2,
+        padding: "0 14px", borderBottom: "1px solid var(--sc-border)",
+        background: "var(--sc-card)",
+      }}>
         {visibleTabs.map((tab) => {
           const isActive = activeLabel === tab.label;
-          const activeStyle: React.CSSProperties | undefined = isActive
-            ? ({ "--primary": COLORS.primary.DEFAULT } as React.CSSProperties)
-            : undefined;
           return (
             <button
               key={tab.label}
               onClick={() => navigate(tab.path)}
-              style={activeStyle}
-              className={
-                isActive
-                  ? "px-4 py-2 text-sm font-semibold border-b-2 border-[var(--primary)] text-[var(--primary)]"
-                  : "px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-              }
+              style={{
+                padding: "8px 14px", fontSize: 13, fontWeight: isActive ? 600 : 400,
+                background: "transparent", border: "none", cursor: "pointer",
+                borderBottom: isActive ? "2px solid var(--btn-primary-bg)" : "2px solid transparent",
+                color: isActive ? "var(--btn-primary-bg)" : "var(--dt-muted)",
+                transition: "color 140ms ease, border-color 140ms ease",
+                whiteSpace: "nowrap",
+              }}
             >
               {tab.label}
             </button>
@@ -70,9 +83,12 @@ const SettingConfig: React.FC = () => {
         })}
       </div>
 
-      {activeLabel === "User Management"   && <UserManagementList />}
-      {activeLabel === "Role Management"   && <RoleManagement />}
-      {activeLabel === "Module Management" && <ModuleManagement />}
+      {/* ── Content ─────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {activeLabel === "User Management"   && <UserManagementList />}
+        {activeLabel === "Role Management"   && <RoleManagement />}
+        {activeLabel === "Module Management" && <ModuleManagement />}
+      </div>
     </div>
   );
 };

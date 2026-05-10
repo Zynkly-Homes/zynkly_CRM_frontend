@@ -1,32 +1,23 @@
 import React from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { MyInput } from "../../atoms/MyInput";
-import { MyButton } from "../../atoms/MyButton";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { postData, patchData, getData } from "../../services/crmServices";
 import { Check } from "lucide-react";
-import { COLORS } from "../../theme/colors";
 import { useCookies } from "react-cookie";
+import { CleanInput, CleanButton } from "../../atoms/my_clean_code_atoms";
+
+// ── Types ──────────────────────────────────────────────────────────────────
 
 type ModuleAccess = {
-  module_id: string;
-  label: string;
-  create?: boolean;
-  edit?: boolean;
-  view?: boolean;
-  delete?: boolean;
-  transfer?: boolean;
-  export?: boolean;
+  module_id: string; label: string;
+  create?: boolean; edit?: boolean; view?: boolean;
+  delete?: boolean; transfer?: boolean; export?: boolean;
 };
 
 type ModuleFromAPI = {
-  _id: string;
-  module_id: string;
-  module_name: string;
+  _id: string; module_id: string; module_name: string;
   is_active?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
 };
 
 type RoleFormProps = {
@@ -35,206 +26,103 @@ type RoleFormProps = {
   onSuccess: () => void;
 };
 
-/** Checkbox-looking button: proper a11y + keyboard + focus ring */
-const PermCheckbox: React.FC<{
-  checked: boolean;
-  onToggle: () => void;
-  ariaLabel?: string;
-}> = ({ checked, onToggle, ariaLabel }) => {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
-      style={
-        checked
-          ? {
-              backgroundColor: COLORS.primary.DEFAULT,
-              borderColor: COLORS.primary.DEFAULT,
-            }
-          : undefined
-      }
-      className={[
-        "h-5 w-5 rounded-md border transition-all",
-        "flex items-center justify-center",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-        checked
-          ? "text-white"
-          : "border-gray-300 bg-transparent dark:border-gray-600",
-        !checked && "hover:bg-gray-100 dark:hover:bg-gray-700",
-      ].join(" ")}
-    >
-      {checked && <Check className="h-3.5 w-3.5 text-white" />}
-    </button>
-  );
-};
+const PERM_FIELDS = ["create", "edit", "view", "delete", "transfer", "export"] as const;
+
+// ── PermCheckbox ───────────────────────────────────────────────────────────
+
+const PermCheckbox: React.FC<{ checked: boolean; onToggle: () => void; ariaLabel?: string }> = (
+  { checked, onToggle, ariaLabel },
+) => (
+  <button
+    type="button"
+    role="checkbox"
+    aria-checked={checked}
+    aria-label={ariaLabel}
+    onClick={onToggle}
+    onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onToggle(); } }}
+    style={{
+      width: 18, height: 18, borderRadius: 4,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      border: `1.5px solid ${checked ? "var(--btn-primary-bg)" : "var(--fi-border)"}`,
+      background: checked ? "var(--btn-primary-bg)" : "transparent",
+      cursor: "pointer", flexShrink: 0, transition: "background 120ms, border-color 120ms",
+      outline: "none",
+    }}
+  >
+    {checked && <Check size={11} style={{ color: "var(--btn-primary-text)" }} />}
+  </button>
+);
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) => {
-  const [cookies] = useCookies(["t"]);
-  const [modules, setModules] = React.useState<ModuleFromAPI[]>([]);
+  const [cookies]       = useCookies(["t"]);
+  const [modules,       setModules]       = React.useState<ModuleFromAPI[]>([]);
   const [loadingModules, setLoadingModules] = React.useState(true);
 
-  // Fetch modules from identity API
   React.useEffect(() => {
-    const fetchModules = async () => {
-      try {
-        setLoadingModules(true);
-        const response = await getData<{
-          success: boolean;
-          data: { data: ModuleFromAPI[]; total: number };
-        }>({
-          endpoint: "modules",
-          token: cookies.t || token,
-          instance: "identity",
-          params: { page: 1, limit: 100 },
-        });
-        setModules(response?.data?.data ?? []);
-      } catch {
-        showToastnew.error("Failed to load modules");
-        setModules([]);
-      } finally {
-        setLoadingModules(false);
-      }
-    };
-
-    fetchModules();
+    setLoadingModules(true);
+    getData<{ success: boolean; data: { data: ModuleFromAPI[]; total: number } }>({
+      endpoint: "modules", token: cookies.t || token, instance: "identity",
+      params: { page: 1, limit: 100 },
+    })
+      .then((res) => setModules(res?.data?.data ?? []))
+      .catch(() => { showToastnew.error("Failed to load modules"); setModules([]); })
+      .finally(() => setLoadingModules(false));
   }, [cookies.t, token]);
 
   const validationSchema = Yup.object({
     role_name: Yup.string().trim().required("Role name is required"),
-    role_access: Yup.array()
-      .test(
-        "at-least-one-permission",
-        "At least one permission must be selected",
-        (modulesArray: any[] | undefined) => {
-          if (!modulesArray) return false;
-          return modulesArray.some((m) =>
-            m.create ||
-            m.edit ||
-            m.view ||
-            m.delete ||
-            m.transfer ||
-            m.export
-          );
-        }
-      ),
+    role_access: Yup.array().test(
+      "at-least-one",
+      "At least one permission must be selected",
+      (arr: any[] | undefined) => !!arr?.some((m) => PERM_FIELDS.some((f) => m[f])),
+    ),
   });
 
   const prepareInitial = () => {
-    const roleName = initialValues?.role_name ?? "";
-    
-    // If we have modules loaded from API
-    if (modules.length > 0) {
-      const roleAccess =
-        initialValues?.role_access && initialValues.role_access.length > 0
-          ? modules.map((m) => ({
-              module_id: m.module_id,
-              label: m.module_name,
-              ...(initialValues.role_access?.find((r: { module_id: string }) => r.module_id === m.module_id) || {}),
-            }))
-          : modules.map((m) => ({
-              module_id: m.module_id,
-              label: m.module_name,
-            }));
-      return { role_name: roleName, role_access: roleAccess };
-    }
-    
-    // Fallback if no modules loaded
-    return { role_name: roleName, role_access: [] };
+    if (modules.length === 0) return { role_name: initialValues?.role_name ?? "", role_access: [] };
+    const roleAccess = modules.map((m) => ({
+      module_id: m.module_id,
+      label:     m.module_name,
+      ...(initialValues?.role_access?.find((r: { module_id: string }) => r.module_id === m.module_id) || {}),
+    }));
+    return { role_name: initialValues?.role_name ?? "", role_access: roleAccess };
   };
 
-  const handleCreate = async (values: any, helpers: any) => {
-    const { setSubmitting, resetForm } = helpers;
+  const buildPayload = (values: any) => ({
+    role_name:   values.role_name.trim(),
+    role_access: values.role_access.map((r: any) => ({
+      module_id: r.module_id,
+      ...Object.fromEntries(PERM_FIELDS.map((f) => [f, !!r[f]])),
+    })),
+  });
+
+  const handleSubmit = async (values: any, { setSubmitting, resetForm }: any) => {
     try {
-      const payload = {
-        role_name: values.role_name.trim(),
-        role_access: values.role_access.map((r: any) => ({
-          module_id: r.module_id,
-          create: !!r.create,
-          edit: !!r.edit,
-          view: !!r.view,
-          delete: !!r.delete,
-          transfer: !!r.transfer,
-          export: !!r.export,
-        })),
-      };
-      const res = await postData({ endpoint: "roles", token: cookies.t || token, instance: "identity", data: payload });
-      showToastnew.success("Role Created Successfully");
-      resetForm();
-      onSuccess();
-      return res;
+      if (initialValues?._id) {
+        await patchData({ endpoint: `roles/${initialValues._id}`, token: cookies.t || token, instance: "identity", data: buildPayload(values) });
+        showToastnew.success("Role updated successfully");
+        onSuccess();
+      } else {
+        await postData({ endpoint: "roles", token: cookies.t || token, instance: "identity", data: buildPayload(values) });
+        showToastnew.success("Role created successfully");
+        resetForm();
+        onSuccess();
+      }
     } catch (err: any) {
-      console.log("msg : -", err?.error?.response?.data?.error);
-      showToastnew.error(err?.error?.response?.data?.error || "Failed to save role");
+      showToastnew.error(err?.error?.response?.data?.error || err?.data?.message || "Failed to save role");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = async (values: any, helpers: any) => {
-    const { setSubmitting } = helpers;
-    try {
-      const payload = {
-        role_name: values.role_name.trim(),
-        role_access: values.role_access.map((r: any) => ({
-          module_id: r.module_id,
-          create: !!r.create,
-          edit: !!r.edit,
-          view: !!r.view,
-          delete: !!r.delete,
-          transfer: !!r.transfer,
-          export: !!r.export,
-        })),
-      };
-      // await patchData({
-      //   endpoint: "role/updateRole",
-      //   token: cookies.t || token,
-      //   params: { id: initialValues?._id },
-      //   data: payload,
-      // });
-      
-      await patchData({
-        endpoint: `roles/${initialValues?._id}`,
-        token: cookies.t || token,
-        instance: "identity",
-        data: payload,
-      });
-      showToastnew.success("Role Saved Successfully");
-      onSuccess();
-    } catch (err: any) {
-      showToastnew.error(err?.data?.message || "Failed to update role");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Show loading state while fetching modules
   if (loadingModules) {
-    return (
-      <div className="flex justify-center items-center py-8">
-        <div className="text-gray-500 dark:text-gray-400">Loading modules...</div>
-      </div>
-    );
+    return <p style={{ fontSize: 13, color: "var(--fi-muted)", padding: "16px 0" }}>Loading modules…</p>;
   }
 
-  // Show message if no modules found
   if (modules.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-500 dark:text-gray-400">No modules available</p>
-        <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-          Please contact administrator to add modules
-        </p>
-      </div>
-    );
+    return <p style={{ fontSize: 13, color: "var(--fi-muted)", padding: "16px 0" }}>No modules available. Contact administrator.</p>;
   }
 
   return (
@@ -242,82 +130,65 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
       initialValues={prepareInitial()}
       validationSchema={validationSchema}
       enableReinitialize
-      onSubmit={async (values, helpers) => {
-        if (initialValues?._id) {
-          await handleEdit(values, helpers);
-        } else {
-          await handleCreate(values, helpers);
-        }
-      }}
+      onSubmit={handleSubmit}
     >
-      {({
-        values,
-        errors,
-        touched,
-        handleChange,
-        handleBlur,
-        isSubmitting,
-        setFieldValue,
-        resetForm,
-      }) => {
-        const togglePermission = (moduleId: string, field: keyof ModuleAccess) => {
-          const next = (values.role_access || []).map((m: ModuleAccess) =>
-            m.module_id === moduleId ? { ...m, [field]: !m[field] } : m
+      {({ values, errors, touched, handleChange, handleBlur, isSubmitting, setFieldValue, resetForm }) => {
+        const togglePerm = (moduleId: string, field: keyof ModuleAccess) => {
+          setFieldValue(
+            "role_access",
+            (values.role_access || []).map((m: ModuleAccess) =>
+              m.module_id === moduleId ? { ...m, [field]: !m[field] } : m,
+            ),
           );
-          setFieldValue("role_access", next);
         };
 
         return (
-          <Form autoComplete="off" className="space-y-4">
-            <div className="w-full md:w-1/2 lg:w-1/3">
-              <MyInput
-                label="Role Name"
-                placeholder="Enter Role Name"
-                name="role_name"
-                value={values.role_name}
-                onChange={handleChange}
-                onBlur={handleBlur}
+          <Form autoComplete="off">
+            <div style={{ maxWidth: 340, marginBottom: 16 }}>
+              <CleanInput
+                label="Role Name" required placeholder="Enter role name"
+                name="role_name" value={values.role_name}
+                onChange={handleChange} onBlur={handleBlur}
                 error={touched.role_name ? (errors.role_name as string) : ""}
               />
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-              <table className="w-full min-w-[600px]">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky left-0 bg-gray-50 dark:bg-gray-700">
+            {/* Permissions table */}
+            <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--fi-border)", marginBottom: 16 }}>
+              <table style={{ width: "100%", minWidth: 580, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "var(--dt-header)" }}>
+                    <th style={{ padding: "8px 12px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--dt-muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>
                       Module
                     </th>
-                    {["Create", "Edit", "View", "Delete", "Transfer", "Export"].map((label) => (
-                      <th
-                        key={label}
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-                      >
-                        {label}
+                    {PERM_FIELDS.map((f) => (
+                      <th key={f} style={{ padding: "8px 12px", textAlign: "center", fontSize: 11, fontWeight: 600, color: "var(--dt-muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+                        {f}
                       </th>
                     ))}
                   </tr>
                 </thead>
-
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {(values.role_access || []).map((m: ModuleAccess) => (
+                <tbody>
+                  {(values.role_access || []).map((m: ModuleAccess, i: number) => (
                     <tr
                       key={m.module_id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      style={{
+                        borderTop: i > 0 ? "1px solid var(--fi-border)" : undefined,
+                        transition: "background 120ms",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--dt-hover)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
                     >
-                      <td className="px-4 py-2.5 text-sm text-gray-900 dark:text-gray-200 font-medium sticky left-0 bg-white dark:bg-gray-900">
+                      <td style={{ padding: "8px 12px", fontSize: 13, fontWeight: 500, color: "var(--fi-text)" }}>
                         {m.label}
                       </td>
-
-                      {(["create", "edit", "view", "delete", "transfer", "export"] as (keyof ModuleAccess)[]).map((f) => (
-                        <td key={f} className="px-4 py-2.5">
-                          <div className="flex items-center justify-center">
-                            <PermCheckbox
-                              checked={!!m[f]}
-                              onToggle={() => togglePermission(m.module_id, f)}
-                              ariaLabel={`${m.label} ${f}`}
-                            />
-                          </div>
+                      {PERM_FIELDS.map((f) => (
+                        <td key={f} style={{ padding: "8px 12px", textAlign: "center" }}>
+                          <PermCheckbox
+                            checked={!!m[f]}
+                            onToggle={() => togglePerm(m.module_id, f)}
+                            ariaLabel={`${m.label} ${f}`}
+                          />
                         </td>
                       ))}
                     </tr>
@@ -327,23 +198,18 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
             </div>
 
             {errors.role_access && (
-              <p className="text-red-500 text-sm">
+              <p style={{ fontSize: 11, color: "var(--fi-border-error)", marginBottom: 12 }}>
                 {String(errors.role_access)}
               </p>
             )}
 
-            <div className="flex gap-3 pt-2">
-              <MyButton type="submit" variant="primary" isLoading={isSubmitting}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <CleanButton type="submit" variant="primary" size="sm" loading={isSubmitting}>
                 {initialValues?._id ? "Update Role" : "Create Role"}
-              </MyButton>
-              <MyButton
-                type="button"
-                variant="outline"
-                onClick={() => resetForm()}
-                disabled={isSubmitting}
-              >
+              </CleanButton>
+              <CleanButton type="button" variant="outline" size="sm" onClick={() => resetForm()} disabled={isSubmitting}>
                 Reset
-              </MyButton>
+              </CleanButton>
             </div>
           </Form>
         );

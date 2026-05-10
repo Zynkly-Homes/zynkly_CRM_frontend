@@ -1,10 +1,11 @@
 import React, { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useAuth } from "../hooks/useAuth";
 import { DashboardLayout } from "../templates/DashboardLayout";
 import { selectAccessData } from "../store/slices/accessSlice";
 import { LoaderOverlay } from "../atoms/LoaderOverlay";
+import { NavigationProgress } from "../atoms/NavigationProgress";
 
 // ── Lazy-loaded pages ──────────────────────────────────────────────────────
 const LoginPage          = lazy(() => import("../pages/LoginPage").then(m => ({ default: m.LoginPage })));
@@ -14,36 +15,41 @@ const DashboardPage      = lazy(() => import("../pages/dashboard-admin/Dashboard
 const SettingConfig      = lazy(() => import("../pages/setting-config"));
 const ApiKeyPage         = lazy(() => import("../pages/setting-config/ApiKeyPage"));
 const BookingPage        = lazy(() => import("../pages/booking-management"));
+const AdminDashboard     = lazy(() => import("../pages/dashboard/admin-dashboard/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
+const ManagerDashboard   = lazy(() => import("../pages/dashboard/manager-dashboard/ManagerDashboard").then(m => ({ default: m.ManagerDashboard })));
 const Course             = lazy(() => import("../pages/Course"));
 const NotFoundPage       = lazy(() => import("../pages/NotFoundPage"));
 
 const PageLoader = () => <LoaderOverlay show />;
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function rolePermitted(user: any, allowed: string[]): boolean {
+  const role = (user?.role_name || "").toLowerCase();
+  return allowed.some(r => role.includes(r.toLowerCase()));
+}
+
+function dashboardForRole(roleName: string): string {
+  const role = (roleName || "").toLowerCase();
+  if (role.includes("super"))   return "/dashboard/admin";
+  if (role.includes("manager")) return "/dashboard/manager";
+  return "/booking-management";
+}
+
 // ── ProtectedRoute ─────────────────────────────────────────────────────────
-const ProtectedRoute: React.FC<{ children: React.ReactNode; moduleId?: string }> = ({ children, moduleId }) => {
+const ProtectedRoute: React.FC<{
+  children:     React.ReactNode;
+  moduleId?:    string;
+  roleAllowed?: string[];
+}> = ({ children, moduleId, roleAllowed }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const access = useSelector((s: any) => selectAccessData(s));
-  const location = useLocation();
+  const user   = useSelector((s: any) => s.user?.userData || s.user);
 
-  const searchParams = new URLSearchParams(location.search);
-  const mode = searchParams.get("mode");
-
-  if (isLoading) return <LoaderOverlay show />;
+  if (isLoading)       return <LoaderOverlay show />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-
-  if (moduleId) {
-    const moduleAccess = access[moduleId] || {};
-    if (!moduleAccess.view) return <Navigate to="/no-access" replace />;
-
-    if (moduleId === "rules-management" && mode) {
-      if (mode === "edit" && !moduleAccess.edit) {
-        return <Navigate to={`/rules-management?bank_id=${searchParams.get("bank_id") || ""}&product_id=${searchParams.get("product_id") || ""}&mode=view`} replace />;
-      }
-      if (mode === "create" && !moduleAccess.create) {
-        return <Navigate to={`/rules-management?bank_id=${searchParams.get("bank_id") || ""}&product_id=${searchParams.get("product_id") || ""}&mode=view`} replace />;
-      }
-    }
-  }
+  if (roleAllowed && !rolePermitted(user, roleAllowed)) return <Navigate to="/" replace />;
+  if (moduleId && !access[moduleId]?.view) return <Navigate to="/no-access" replace />;
 
   return <>{children}</>;
 };
@@ -59,37 +65,13 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const RedirectToHome: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAuth();
-  const user   = useSelector((s: any) => s.user?.userData || s.user);
-  const access = useSelector((s: any) => selectAccessData(s));
+  const user = useSelector((s: any) => s.user?.userData || s.user);
 
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) { navigate("/login", { replace: true }); return; }
-
-    const norm: Record<string, any> = {};
-    Object.keys(access || {}).forEach(key => {
-      norm[key.replace(/-/g, "").replace(/_/g, "").toLowerCase()] = access[key];
-    });
-
-    const roleName = (user?.role_name || user?.role || user?.user_name || "").toLowerCase();
-
-    if      (norm["dashboardxyz"]?.view)           navigate("/dashboard-xyz",            { replace: true });
-    else if (norm["dashboardadmin"]?.view)          navigate("/dashboard-admin",          { replace: true });
-    else if (norm["dashboardtso"]?.view)            navigate("/dashboard-tso",            { replace: true });
-    else if (norm["dashboardmanager"]?.view)        navigate("/dashboard-manager",        { replace: true });
-    else if (norm["dashboardteamleader"]?.view)     navigate("/dashboard-team-leader",    { replace: true });
-    else if (norm["dashboardbranchmanager"]?.view)  navigate("/dashboard-branch-manager", { replace: true });
-    else if (norm["usermanagement"]?.view)          navigate("/setting-config/user-management",    { replace: true });
-    else if (norm["rolemanagement"]?.view)          navigate("/setting-config/role-management",    { replace: true });
-    else if (norm["modulemanagement"]?.view)        navigate("/setting-config/module-management",  { replace: true });
-    else if (norm["apikeymangement"]?.view)         navigate("/setting-config/api-key-management", { replace: true });
-    else {
-      if      (roleName.includes("tso"))                                    navigate("/dashboard-tso",          { replace: true });
-      else if (roleName.includes("team") && roleName.includes("leader"))    navigate("/dashboard-team-leader",  { replace: true });
-      else if (roleName.includes("manager"))                                 navigate("/dashboard-manager",      { replace: true });
-      else                                                                   navigate("/setting-config/user-management", { replace: true });
-    }
-  }, [isAuthenticated, isLoading, user, access, navigate]);
+    navigate(dashboardForRole(user?.role_name), { replace: true });
+  }, [isAuthenticated, isLoading, user?.role_name, navigate]);
 
   return null;
 };
@@ -102,7 +84,9 @@ const InLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 // ── AppRoutes ──────────────────────────────────────────────────────────────
 export const AppRoutes: React.FC = () => {
   return (
-    <Suspense fallback={<PageLoader />}>
+    <>
+      <NavigationProgress />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Public */}
         <Route path="/login"               element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -157,6 +141,24 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
+        {/* New Dashboard pages */}
+        <Route
+          path="/dashboard/admin"
+          element={
+            <ProtectedRoute roleAllowed={["super"]}>
+              <InLayout><AdminDashboard /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/manager"
+          element={
+            <ProtectedRoute roleAllowed={["manager"]}>
+              <InLayout><ManagerDashboard /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+
         {/* Booking Management */}
         <Route
           path="/booking-management"
@@ -190,6 +192,7 @@ export const AppRoutes: React.FC = () => {
         {/* 404 */}
         <Route path="*" element={<InLayout><NotFoundPage /></InLayout>} />
       </Routes>
-    </Suspense>
+      </Suspense>
+    </>
   );
 };

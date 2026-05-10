@@ -11,6 +11,23 @@ const getInitialDark = (): boolean => {
 
 const applyToDocument = (dark: boolean) => {
   document.documentElement.classList.toggle('dark', dark);
+  // Sync Safari / PWA browser chrome color with the app theme
+  updateThemeColorMeta(dark);
+};
+
+const updateThemeColorMeta = (dark: boolean) => {
+  // Update all theme-color meta tags (we have two: one per color scheme)
+  // The "no media" or "light" one is the active programmatic one for PWA chrome
+  const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+  metas.forEach((meta) => {
+    const media = meta.getAttribute("media") || "";
+    if (media.includes("dark")) {
+      meta.setAttribute("content", "#0d0d0d");
+    } else {
+      // light / no media — update to match current mode
+      meta.setAttribute("content", dark ? "#0d0d0d" : "#ffffff");
+    }
+  });
 };
 
 export const useDarkMode = () => {

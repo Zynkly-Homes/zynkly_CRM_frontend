@@ -31,10 +31,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed: collapsedProp, onCo
   const { collapsed, isMobile, mobileExpanded, openItems, setCollapsed, setMobileExpanded, toggleAccordion, onNavClick } =
     useSidebar({ collapsedProp, onCollapsedChange });
 
-  const navigation = useNavigation(accessData);
+  const navigation = useNavigation(accessData, userDataRedux?.role_name || "");
 
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  // Track hover on the entire collapsed sidebar
   const [sidebarHovered, setSidebarHovered] = useState(false);
 
   const handleProfileClick = useCallback(() => {
@@ -75,27 +74,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed: collapsedProp, onCo
       {/* ── Desktop sidebar ── */}
       {!isMobile && (
         <aside
-          className="h-full w-full bg-white dark:bg-[var(--sc-dark-bg-sidebar)]"
+          style={{ height: "100%", width: "100%", background: "var(--sb-bg)", display: "flex", flexDirection: "column" }}
           onMouseEnter={() => collapsed && setSidebarHovered(true)}
           onMouseLeave={() => setSidebarHovered(false)}
         >
-          <div className="flex flex-col h-full">
-            <SidebarLogo
-              isCollapsed={collapsed}
-              isHovered={sidebarHovered}
-              onCollapse={() => setCollapsed(true)}
-              onExpand={() => { setCollapsed(false); setSidebarHovered(false); }}
-            />
+          <SidebarLogo
+            isCollapsed={collapsed}
+            isHovered={sidebarHovered}
+            onCollapse={() => setCollapsed(true)}
+            onExpand={() => { setCollapsed(false); setSidebarHovered(false); }}
+          />
 
-            {/* ul has NO padding — nav items own their own px-3 */}
-            <nav className="mt-2 flex-1 overflow-auto sc-scrollbar">
-              <ul className="space-y-1">
-                <NavList {...navListProps} />
-              </ul>
-            </nav>
+          {/* Collapsed: symmetric horizontal padding so icons sit centred under logo.
+              Expanded:  8px each side for label breathing room.              */}
+          <nav
+            style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "4px 6px" }}
+            className="sc-scrollbar"
+          >
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+              <NavList {...navListProps} />
+            </ul>
+          </nav>
 
-            <UserProfile isCollapsed={collapsed} {...profileProps} />
-          </div>
+          <UserProfile isCollapsed={collapsed} {...profileProps} />
         </aside>
       )}
 

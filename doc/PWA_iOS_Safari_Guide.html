@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PWA & iOS Safari Guide — Zynkly Admin</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #ffffff;
+      --bg-alt:    #f7f7f8;
+      --bg-code:   #f3f4f6;
+      --border:    #e5e7eb;
+      --text:      #111827;
+      --text-dim:  #4b5563;
+      --text-muted:#6b7280;
+      --accent:    #4f46e5;
+      --accent-bg: #eef2ff;
+      --green:     #16a34a;
+      --green-bg:  #f0fdf4;
+      --amber:     #d97706;
+      --amber-bg:  #fffbeb;
+      --red:       #dc2626;
+      --red-bg:    #fef2f2;
+      --radius:    8px;
+      --font-mono: "SF Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+      --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Helvetica, Arial, sans-serif;
+    }
+
+    html { font-family: var(--font); color: var(--text); background: var(--bg); scroll-behavior: smooth; }
+    body { line-height: 1.65; font-size: 15px; }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .page-wrap  { display: flex; min-height: 100vh; }
+
+    /* Sidebar TOC */
+    .toc-sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--bg-alt);
+      padding: 28px 0 40px;
+    }
+    .toc-header {
+      padding: 0 20px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .toc-list { list-style: none; }
+    .toc-list li a {
+      display: block;
+      padding: 5px 20px;
+      font-size: 13px;
+      color: var(--text-dim);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    .toc-list li a:hover {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: var(--accent-bg);
+    }
+    .toc-list li.sub a { padding-left: 34px; font-size: 12px; }
+
+    /* Main content */
+    .content { flex: 1; min-width: 0; max-width: 860px; padding: 48px 52px; }
+
+    /* ── Typography ────────────────────────────────────────── */
+    h1 { font-size: 30px; font-weight: 800; letter-spacing: -.03em; color: var(--text); line-height: 1.15; }
+    h2 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--text); margin-top: 52px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 15px; font-weight: 700; color: var(--text); margin-top: 28px; margin-bottom: 10px; }
+    h4 { font-size: 13px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 20px; margin-bottom: 8px; }
+
+    p  { color: var(--text-dim); margin-bottom: 14px; }
+    ul, ol { margin: 0 0 14px 20px; color: var(--text-dim); }
+    li { margin-bottom: 5px; }
+    strong { color: var(--text); font-weight: 600; }
+    a  { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    /* ── Code ──────────────────────────────────────────────── */
+    code {
+      font-family: var(--font-mono);
+      font-size: .84em;
+      background: var(--bg-code);
+      color: #c7254e;
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    pre {
+      background: #1e1e2e;
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      border: 1px solid #2d2d44;
+    }
+    pre code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: none;
+      color: #cdd6f4;
+      padding: 0;
+      border: none;
+    }
+    /* Syntax color classes — used inline on spans */
+    .kw  { color: #cba6f7; } /* keywords: const, function, if */
+    .str { color: #a6e3a1; } /* strings */
+    .num { color: #fab387; } /* numbers */
+    .cmt { color: #6c7086; font-style: italic; } /* comments */
+    .fn  { color: #89b4fa; } /* function names */
+    .tag { color: #f38ba8; } /* HTML tags */
+    .atr { color: #fab387; } /* HTML attributes */
+    .val { color: #a6e3a1; } /* attribute values */
+    .prop{ color: #89dceb; } /* CSS properties */
+    .sel { color: #cba6f7; } /* CSS selectors */
+
+    /* ── Tables ────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 13.5px; }
+    th {
+      background: var(--bg-alt);
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    td { padding: 9px 14px; border: 1px solid var(--border); color: var(--text-dim); vertical-align: top; }
+    tr:nth-child(even) td { background: var(--bg-alt); }
+
+    /* ── Callout boxes ─────────────────────────────────────── */
+    .callout {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      margin: 16px 0;
+      font-size: 13.5px;
+      border-left: 3px solid;
+    }
+    .callout-icon { font-size: 16px; flex-shrink: 0; line-height: 1.5; }
+    .callout p { margin: 0; }
+    .callout.info    { background: var(--accent-bg); border-color: var(--accent); }
+    .callout.info    p { color: #3730a3; }
+    .callout.success { background: var(--green-bg);  border-color: var(--green);  }
+    .callout.success p { color: #166534; }
+    .callout.warning { background: var(--amber-bg);  border-color: var(--amber);  }
+    .callout.warning p { color: #92400e; }
+    .callout.danger  { background: var(--red-bg);    border-color: var(--red);    }
+    .callout.danger  p { color: #991b1b; }
+
+    /* ── Checklist ─────────────────────────────────────────── */
+    .checklist { list-style: none; margin-left: 0; }
+    .checklist li {
+      display: flex;
+      align-items: baseline;
+      gap: 9px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13.5px;
+      color: var(--text-dim);
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checkbox {
+      width: 15px;
+      height: 15px;
+      border: 1.5px solid var(--border);
+      border-radius: 3px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      display: inline-block;
+    }
+
+    /* ── File path label ───────────────────────────────────── */
+    .file-path {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 5px;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+    }
+    .file-path::before { content: "📄"; font-size: 13px; }
+
+    .file-created::before { content: "✨"; }
+    .file-modified::before { content: "✏️"; }
+
+    /* ── Section number badge ──────────────────────────────── */
+    .section-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-right: 8px;
+      vertical-align: middle;
+      position: relative;
+      top: -1px;
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    .doc-header {
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .doc-meta { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+    .meta-badge {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+
+    /* ── PDF / Print button ─────────────────────────────────── */
+    .pdf-btn {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 20px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font);
+      border: none;
+      border-radius: 99px;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(79,70,229,.35);
+      z-index: 100;
+      transition: background .15s, transform .1s, box-shadow .15s;
+    }
+    .pdf-btn:hover {
+      background: #4338ca;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(79,70,229,.45);
+    }
+    .pdf-btn:active { transform: translateY(0); }
+    .pdf-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+    /* ── Print styles (PDF) ────────────────────────────────── */
+    @media print {
+      .toc-sidebar, .pdf-btn { display: none !important; }
+      .content { max-width: 100%; padding: 20px 30px; }
+      h2 { break-before: page; }
+      h2:first-of-type { break-before: avoid; }
+      pre { white-space: pre-wrap; word-break: break-word; border: 1px solid #ccc; }
+      a { color: var(--text) !important; text-decoration: none; }
+      table { break-inside: avoid; }
+      .callout { break-inside: avoid; }
+      @page {
+        margin: 20mm 18mm;
+        size: A4;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- PDF Button -->
+<button class="pdf-btn" onclick="window.print()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+    <rect x="6" y="14" width="12" height="8"/>
+  </svg>
+  Download PDF
+</button>
+
+<div class="page-wrap">
+
+  <!-- ── Sidebar TOC ───────────────────────────────────────── -->
+  <nav class="toc-sidebar">
+    <div class="toc-header">Contents</div>
+    <ul class="toc-list">
+      <li><a href="#s1">1. What is a PWA?</a></li>
+      <li><a href="#s2">2. Safe Area &amp; viewport-fit</a></li>
+      <li><a href="#s3">3. Files Created</a></li>
+      <li class="sub"><a href="#s3-manifest">manifest.json</a></li>
+      <li class="sub"><a href="#s3-sw">sw.js (Service Worker)</a></li>
+      <li class="sub"><a href="#s3-icon">icon.svg</a></li>
+      <li class="sub"><a href="#s3-hook">useIOSViewport.ts</a></li>
+      <li><a href="#s4">4. Files Modified</a></li>
+      <li class="sub"><a href="#s4-html">index.html</a></li>
+      <li class="sub"><a href="#s4-css">index.css</a></li>
+      <li class="sub"><a href="#s4-dark">useDarkMode.ts</a></li>
+      <li class="sub"><a href="#s4-layout">DashboardLayout.tsx</a></li>
+      <li class="sub"><a href="#s4-main">main.tsx</a></li>
+      <li><a href="#s5">5. Generate Icons</a></li>
+      <li><a href="#s6">6. Generate Splash Screens</a></li>
+      <li><a href="#s7">7. How to Test on iPhone</a></li>
+      <li><a href="#s8">8. Common Problems &amp; Fixes</a></li>
+      <li><a href="#s9">9. Dark Mode &amp; Theme Color</a></li>
+      <li><a href="#s10">10. Service Worker Deep Dive</a></li>
+      <li><a href="#s11">11. Full Checklist</a></li>
+    </ul>
+  </nav>
+
+  <!-- ── Main content ─────────────────────────────────────── -->
+  <main class="content">
+
+    <div class="doc-header">
+      <h1>PWA &amp; iOS Safari<br>Optimization Guide</h1>
+      <div class="doc-meta">
+        <span class="meta-badge">Zynkly Admin</span>
+        <span class="meta-badge">May 2026</span>
+        <span class="meta-badge">React + Vite</span>
+        <span class="meta-badge">iOS Safari 15+</span>
+      </div>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s1"><span class="section-num">1</span>What is a PWA?</h2>
+
+    <p>A <strong>Progressive Web App (PWA)</strong> is a website that installs on the phone and behaves exactly like a native app — no App Store required.</p>
+
+    <p>When a user opens the app in iPhone Safari and taps <strong>"Add to Home Screen"</strong>, the browser installs it. After that:</p>
+
+    <ul>
+      <li>It opens <strong>without the Safari browser bar</strong> — no address bar, no tab bar at the bottom.</li>
+      <li>It looks and feels like a <strong>native iPhone app</strong> (like Twitter, Instagram, Linear, Notion).</li>
+      <li>It has its <strong>own icon</strong> on the home screen with a custom name.</li>
+      <li>It shows a <strong>splash/launch screen</strong> while loading (instead of a white flash).</li>
+      <li>It can work <strong>offline</strong> when a service worker is configured.</li>
+      <li>The iPhone <strong>status bar</strong> (time, battery, signal) blends seamlessly into the app.</li>
+    </ul>
+
+    <div class="callout info">
+      <span class="callout-icon">ℹ️</span>
+      <p>For a PWA to work on iPhone you need <strong>4 things</strong>: correct meta tags in HTML, a <code>manifest.json</code>, a service worker (<code>sw.js</code>), and safe-area CSS. All four are covered in this guide.</p>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s2"><span class="section-num">2</span>Safe Area &amp; viewport-fit=cover</h2>
+
+    <h3>The Problem</h3>
+    <p>iPhones have physical areas the screen content must never hide behind:</p>
+    <ul>
+      <li><strong>Notch / Dynamic Island</strong> at the top (camera + sensors)</li>
+      <li><strong>Home Indicator</strong> at the bottom (the thin swipe-up bar)</li>
+      <li><strong>Side bezels</strong> in landscape on notched iPhones</li>
+    </ul>
+    <p>By default, Safari keeps content inside these safe zones and shows white gaps around the edges. The app background cannot fill the full screen. This looks non-native.</p>
+
+    <h3>The Fix: viewport-fit=cover</h3>
+    <pre><code><span class="tag">&lt;meta</span> <span class="atr">name</span>=<span class="val">"viewport"</span>
+      <span class="atr">content</span>=<span class="val">"width=device-width, initial-scale=1.0, viewport-fit=cover"</span> <span class="tag">/&gt;</span></code></pre>
+    <p>This tells Safari: <em>"Let my content go behind the notch and home indicator — I will handle the padding myself."</em></p>
+    <p>Now the shell background color fills the entire screen including behind the Dynamic Island and home indicator bar. This is the premium, native feel.</p>
+
+    <h3>CSS Environment Variables</h3>
+    <p>Once <code>viewport-fit=cover</code> is set, the browser exposes 4 CSS variables:</p>
+    <table>
+      <tr><th>Variable</th><th>What it represents</th><th>Example value (iPhone 15 Pro)</th></tr>
+      <tr><td><code>env(safe-area-inset-top)</code></td><td>Height of Dynamic Island / notch</td><td>59px</td></tr>
+      <tr><td><code>env(safe-area-inset-bottom)</code></td><td>Height of home indicator bar</td><td>34px</td></tr>
+      <tr><td><code>env(safe-area-inset-left)</code></td><td>Side inset in landscape</td><td>0px (portrait)</td></tr>
+      <tr><td><code>env(safe-area-inset-right)</code></td><td>Side inset in landscape</td><td>0px (portrait)</td></tr>
+    </table>
+
+    <p>On devices without a notch, all values are <code>0</code> — so the fallback (6px gutter) still applies. We use <code>max()</code> to handle both cases:</p>
+    <pre><code><span class="sel">.dashboard-shell</span> {
+  <span class="prop">padding-top</span>:    <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-top)    + <span class="num">2px</span>));
+  <span class="prop">padding-bottom</span>: <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-bottom) + <span class="num">2px</span>));
+  <span class="prop">padding-left</span>:   <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-left)   + <span class="num">2px</span>));
+  <span class="prop">padding-right</span>:  <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-right)  + <span class="num">2px</span>));
+}</code></pre>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s3"><span class="section-num">3</span>Files Created</h2>
+
+    <!-- manifest.json -->
+    <h3 id="s3-manifest"><span class="file-path file-created">public/manifest.json</span></h3>
+    <p>The PWA "identity card". Tells the browser the app name, icon, how to display it, and what URL to open when launched from the home screen.</p>
+    <table>
+      <tr><th>Field</th><th>Value</th><th>What it does</th></tr>
+      <tr><td><code>name</code></td><td>"Zynkly Admin"</td><td>Full app name shown during install prompt</td></tr>
+      <tr><td><code>short_name</code></td><td>"NP Admin"</td><td>Name shown under the home screen icon (limited space)</td></tr>
+      <tr><td><code>start_url</code></td><td>"/"</td><td>URL that opens when user taps the home screen icon</td></tr>
+      <tr><td><code>scope</code></td><td>"/"</td><td>Which URLs are considered "inside" the PWA</td></tr>
+      <tr><td><code>display</code></td><td>"standalone"</td><td>Hides all browser UI — no address bar, no tab bar</td></tr>
+      <tr><td><code>orientation</code></td><td>"portrait-primary"</td><td>Locks to portrait on launch</td></tr>
+      <tr><td><code>background_color</code></td><td>"#ffffff"</td><td>Color shown on the splash screen while loading</td></tr>
+      <tr><td><code>theme_color</code></td><td>"#ffffff"</td><td>Android browser chrome color (iOS uses the meta tag instead)</td></tr>
+    </table>
+    <div class="callout warning">
+      <span class="callout-icon">⚠️</span>
+      <p><strong>iOS ignores the manifest <code>icons</code> array.</strong> For Apple devices you must use <code>&lt;link rel="apple-touch-icon"&gt;</code> tags in HTML. Both approaches are included in this project.</p>
+    </div>
+
+    <!-- sw.js -->
+    <h3 id="s3-sw"><span class="file-path file-created">public/sw.js</span></h3>
+    <p>The Service Worker. A JavaScript file that runs in the background, separate from the page. It intercepts all network requests and can serve cached responses — enabling offline support and faster repeat visits.</p>
+
+    <h4>Caching Strategies Used</h4>
+    <table>
+      <tr><th>Strategy</th><th>Used For</th><th>Why</th></tr>
+      <tr><td><strong>Cache-first</strong></td><td>JS, CSS, fonts, images</td><td>Vite adds a content-hash to filenames (e.g. <code>main-a3f9c2.js</code>). These are immutable — cached version is always correct and loads instantly</td></tr>
+      <tr><td><strong>Network-first</strong></td><td>HTML / page navigations</td><td>Always try to get fresh content. Fall back to cached index.html when offline (SPA routing still works)</td></tr>
+      <tr><td><strong>Network-only</strong></td><td>API calls</td><td>Live data must always come from the server. Never serve stale API responses</td></tr>
+    </table>
+
+    <h4>Cache Version Bumping</h4>
+    <pre><code><span class="cmt">// In public/sw.js — bump this when deploying a breaking change:</span>
+<span class="kw">const</span> CACHE_VERSION = <span class="str">'v1'</span>; <span class="cmt">// → change to 'v2' on next major deploy</span>
+
+<span class="cmt">// This causes all caches named 'np-admin-static-v1' to be deleted</span>
+<span class="cmt">// on the next visit, forcing users to download fresh assets.</span></code></pre>
+
+    <!-- icon.svg -->
+    <h3 id="s3-icon"><span class="file-path file-created">public/icons/icon.svg</span></h3>
+    <p>The source icon SVG — a black rounded square with a white "N" letter, matching the TopBar logo mark. This is the <strong>source file</strong> used to generate all PNG icon sizes. The SVG itself is used as the browser tab favicon on modern browsers that support SVG favicons.</p>
+    <div class="callout info">
+      <span class="callout-icon">ℹ️</span>
+      <p>You must convert this SVG to PNG files for iOS home screen icons. See <a href="#s5">Section 5: Generate Icons</a>.</p>
+    </div>
+
+    <!-- useIOSViewport.ts -->
+    <h3 id="s3-hook"><span class="file-path file-created">src/hooks/useIOSViewport.ts</span></h3>
+    <p>A React hook that fixes two persistent iOS Safari bugs.</p>
+
+    <h4>Bug 1 — Address Bar Height Problem</h4>
+    <p><code>100vh</code> in CSS includes the space behind Safari's retractable address bar. When the user scrolls down and the address bar hides, the viewport gets taller — causing layout jumps. The fix is to use <code>window.visualViewport.height</code> (the actual visible height) and store it in a CSS custom property <code>--vh</code>:</p>
+    <pre><code><span class="kw">const</span> <span class="fn">setVh</span> = () => {
+  <span class="kw">const</span> height = window.visualViewport
+    ? window.visualViewport.height
+    : window.innerHeight;
+  document.documentElement.style.<span class="fn">setProperty</span>(<span class="str">'--vh'</span>, <span class="str">`${height * 0.01}px`</span>);
+};</code></pre>
+
+    <h4>Bug 2 — Keyboard Hides Content</h4>
+    <p>When the iOS keyboard opens, <code>window.innerHeight</code> does <em>not</em> shrink (an iOS-only quirk) but <code>window.visualViewport.height</code> does. The hook listens to <code>visualViewport.resize</code> events and updates <code>--vh</code> so layouts don't get buried under the keyboard.</p>
+
+    <h4>lockBodyScroll() Export</h4>
+    <p>iOS Safari ignores <code>overflow: hidden</code> on <code>&lt;body&gt;</code> when a modal is open — the background page keeps scrolling. The correct fix:</p>
+    <pre><code><span class="cmt">// Instead of: document.body.style.overflow = 'hidden'  ← broken on iOS</span>
+
+<span class="kw">const</span> scrollY = window.scrollY;
+document.body.style.position = <span class="str">'fixed'</span>;
+document.body.style.top      = <span class="str">`-${scrollY}px`</span>; <span class="cmt">// preserve position</span>
+document.body.style.width    = <span class="str">'100%'</span>;
+
+<span class="cmt">// On modal close — restore:</span>
+document.body.style.position = <span class="str">''</span>;
+window.<span class="fn">scrollTo</span>(<span class="num">0</span>, scrollY);   <span class="cmt">// jump back to where user was</span></code></pre>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s4"><span class="section-num">4</span>Files Modified</h2>
+
+    <!-- index.html -->
+    <h3 id="s4-html"><span class="file-path file-modified">index.html</span></h3>
+    <p>Every meta tag added and its purpose:</p>
+    <table>
+      <tr><th>Tag</th><th>What it does</th></tr>
+      <tr><td><code>viewport-fit=cover</code></td><td>Extends content behind notch &amp; home indicator (explained in Section 2)</td></tr>
+      <tr><td><code>rel="manifest"</code></td><td>Links the PWA manifest for Chrome/Android install prompt and iOS PWA metadata</td></tr>
+      <tr><td><code>theme-color</code> (light)</td><td>Safari tab bar / PWA chrome color in light mode = <code>#ffffff</code></td></tr>
+      <tr><td><code>theme-color</code> (dark media)</td><td>Safari tab bar color in OS dark mode = <code>#0d0d0d</code></td></tr>
+      <tr><td><code>apple-mobile-web-app-capable</code></td><td>Tells iOS: when added to Home Screen, open in standalone mode (no browser chrome)</td></tr>
+      <tr><td><code>apple-mobile-web-app-status-bar-style: black-translucent</code></td><td>Status bar (time/battery/signal) overlays the app with a translucent background. We then push content down with <code>env(safe-area-inset-top)</code></td></tr>
+      <tr><td><code>apple-mobile-web-app-title</code></td><td>Short name displayed under the home screen icon</td></tr>
+      <tr><td><code>format-detection: telephone=no, date=no</code></td><td>Stops iOS from auto-detecting phone numbers and dates in text and turning them into blue links (breaks layout)</td></tr>
+      <tr><td><code>apple-touch-icon</code> links</td><td>Home screen icons for iOS. iOS ignores manifest icons — these tags are mandatory</td></tr>
+      <tr><td><code>apple-touch-startup-image</code> links</td><td>Splash screens shown on PWA launch. One link per iPhone screen resolution</td></tr>
+      <tr><td>SVG favicon</td><td>Modern browsers (not iOS) show this in the tab. SVG scales perfectly at any size</td></tr>
+    </table>
+
+    <!-- index.css -->
+    <h3 id="s4-css"><span class="file-path file-modified">src/index.css</span></h3>
+    <p>A large iOS Foundation section was added at the very top, before the design tokens. Here is every rule and the exact problem it solves:</p>
+
+    <h4>html &amp; body Base Rules</h4>
+    <pre><code><span class="sel">html</span> {
+  <span class="prop">-webkit-text-size-adjust</span>: <span class="num">100%</span>; <span class="cmt">/* Prevents iOS font resize in landscape mode */</span>
+  <span class="prop">-webkit-font-smoothing</span>: antialiased; <span class="cmt">/* Sharper text on Retina displays */</span>
+  <span class="prop">height</span>: <span class="num">100%</span>;
+  <span class="prop">height</span>: -webkit-fill-available; <span class="cmt">/* iOS Safari height quirk fix */</span>
+}
+
+<span class="sel">body</span> {
+  <span class="prop">overscroll-behavior</span>: none; <span class="cmt">/* No rubber-band bounce at page level */</span>
+  <span class="prop">background-color</span>: <span class="fn">var</span>(--sc-shell); <span class="cmt">/* Fill behind notch with app shell color */</span>
+  <span class="prop">-webkit-tap-highlight-color</span>: transparent; <span class="cmt">/* Remove blue tap flash on touch */</span>
+}</code></pre>
+
+    <h4>Input Zoom Prevention (iOS-only Selector)</h4>
+    <pre><code><span class="cmt">/*
+  @supports (-webkit-touch-callout: none) only matches iOS &amp; iPadOS Safari.
+  It does NOT match Android Chrome or desktop Safari — so this only
+  applies on iPhone and iPad. Nothing on desktop is changed.
+*/</span>
+<span class="sel">@supports (-webkit-touch-callout: none)</span> {
+  <span class="sel">input, textarea, select</span> {
+    <span class="prop">font-size</span>: <span class="num">16px</span> !important; <span class="cmt">/* iOS zooms when < 16px. This prevents it */</span>
+  }
+}</code></pre>
+
+    <h4>Dashboard Shell — Safe Area Aware Height &amp; Padding</h4>
+    <pre><code><span class="sel">.dashboard-shell</span> {
+  <span class="prop">height</span>: <span class="num">100svh</span>; <span class="cmt">/* svh = Small Viewport Height (excludes Safari address bar) */</span>
+  <span class="prop">height</span>: <span class="num">100dvh</span>; <span class="cmt">/* dvh = Dynamic Viewport Height — best option, overrides svh */</span>
+
+  <span class="cmt">/* min 6px gutter on desktop, grows with the notch/home-indicator size */</span>
+  <span class="prop">padding</span>: <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-top)    + <span class="num">2px</span>))
+           <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-right)  + <span class="num">2px</span>))
+           <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-bottom) + <span class="num">2px</span>))
+           <span class="fn">max</span>(<span class="num">6px</span>, <span class="fn">calc</span>(<span class="fn">env</span>(safe-area-inset-left)   + <span class="num">2px</span>));
+}
+
+<span class="sel">@media (max-width: 1023px)</span> {
+  <span class="sel">.dashboard-shell</span> {
+    <span class="cmt">/* Mobile: no side padding — edge-to-edge like a native app */</span>
+    <span class="prop">padding</span>: <span class="fn">env</span>(safe-area-inset-top) <span class="num">0</span> <span class="fn">env</span>(safe-area-inset-bottom) <span class="num">0</span>;
+  }
+}</code></pre>
+
+    <h4>Mobile Content Card — Edge-to-Edge</h4>
+    <pre><code><span class="sel">@media (max-width: 1023px)</span> {
+  <span class="sel">.content-card</span> {
+    <span class="prop">border-radius</span>: <span class="num">0</span> !important; <span class="cmt">/* Native apps don't float inside a rounded card */</span>
+    <span class="prop">border-left</span>:   none !important;
+    <span class="prop">border-right</span>:  none !important;
+  }
+}</code></pre>
+
+    <h4>Scroll Improvements</h4>
+    <pre><code><span class="sel">.sc-scrollbar</span> {
+  <span class="prop">-webkit-overflow-scrolling</span>: touch; <span class="cmt">/* Legacy momentum scroll (harmless on modern iOS) */</span>
+  <span class="prop">overscroll-behavior</span>:        contain; <span class="cmt">/* Scroll doesn't escape to the page */</span>
+  <span class="prop">will-change</span>: scroll-position; <span class="cmt">/* GPU layer — prevents checkerboard flicker on iOS */</span>
+}</code></pre>
+
+    <h4>Touch Target Sizing</h4>
+    <pre><code><span class="cmt">/* pointer: coarse = touch screens. pointer: fine = mouse/trackpad */</span>
+<span class="sel">@media (max-width: 1023px) and (pointer: coarse)</span> {
+  <span class="sel">button, [role="button"]</span> {
+    <span class="prop">min-height</span>: <span class="num">44px</span>; <span class="cmt">/* Apple HIG minimum tap target (44×44pt) */</span>
+    <span class="prop">min-width</span>:  <span class="num">44px</span>;
+  }
+}</code></pre>
+
+    <!-- useDarkMode.ts -->
+    <h3 id="s4-dark"><span class="file-path file-modified">src/hooks/useDarkMode.ts</span></h3>
+    <p>Added <code>updateThemeColorMeta()</code> — called every time the user toggles dark mode. It updates the <code>&lt;meta name="theme-color"&gt;</code> tag in real time so Safari's browser chrome and PWA status bar color changes immediately:</p>
+    <pre><code><span class="kw">const</span> <span class="fn">updateThemeColorMeta</span> = (dark: <span class="kw">boolean</span>) => {
+  <span class="kw">const</span> metas = document.<span class="fn">querySelectorAll</span>(<span class="str">'meta[name="theme-color"]'</span>);
+  metas.<span class="fn">forEach</span>((meta) => {
+    <span class="kw">const</span> media = meta.<span class="fn">getAttribute</span>(<span class="str">"media"</span>) || <span class="str">""</span>;
+    <span class="kw">if</span> (media.<span class="fn">includes</span>(<span class="str">"dark"</span>)) {
+      meta.<span class="fn">setAttribute</span>(<span class="str">"content"</span>, <span class="str">"#0d0d0d"</span>);
+    } <span class="kw">else</span> {
+      <span class="cmt">// light / no media — update to match current mode</span>
+      meta.<span class="fn">setAttribute</span>(<span class="str">"content"</span>, dark ? <span class="str">"#0d0d0d"</span> : <span class="str">"#ffffff"</span>);
+    }
+  });
+};</code></pre>
+
+    <!-- DashboardLayout.tsx -->
+    <h3 id="s4-layout"><span class="file-path file-modified">src/templates/DashboardLayout.tsx</span></h3>
+    <p>Three changes were made:</p>
+    <ol>
+      <li><strong>Added <code>useIOSViewport()</code> hook call</strong> — runs once at the layout root, setting up the <code>--vh</code> variable and keyboard listeners.</li>
+      <li><strong>Outer div: removed inline <code>height</code> and <code>padding</code>, added <code>className="dashboard-shell"</code></strong> — <code>env()</code> values inside inline React styles can behave inconsistently on older iOS. CSS classes are always reliable.</li>
+      <li><strong>Content card: added <code>className="content-card"</code></strong> — allows the CSS to strip the rounded corners and side borders on mobile for an edge-to-edge native look.</li>
+    </ol>
+    <pre><code><span class="cmt">// Before:</span>
+<span class="tag">&lt;div</span> <span class="atr">style</span>=<span class="val">{{ height: "100dvh", padding: "6px", ... }}</span><span class="tag">&gt;</span>
+
+<span class="cmt">// After:</span>
+<span class="tag">&lt;div</span> <span class="atr">className</span>=<span class="val">"dashboard-shell"</span> <span class="atr">style</span>=<span class="val">{{ overflow: "hidden", ... }}</span><span class="tag">&gt;</span></code></pre>
+
+    <!-- main.tsx -->
+    <h3 id="s4-main"><span class="file-path file-modified">src/main.tsx</span></h3>
+    <p>Service worker registration added. The <code>import.meta.env.PROD</code> guard is critical — it ensures the SW only runs in production builds. In development (<code>npm run dev</code>), the SW is skipped so Vite's Hot Module Replacement (HMR) works normally without being intercepted by the cache.</p>
+    <pre><code><span class="kw">if</span> (<span class="str">"serviceWorker"</span> <span class="kw">in</span> navigator && import.meta.env.PROD) {
+  window.<span class="fn">addEventListener</span>(<span class="str">"load"</span>, () => {
+    navigator.serviceWorker
+      .<span class="fn">register</span>(<span class="str">"/sw.js"</span>, { scope: <span class="str">"/"</span> })
+      .<span class="fn">then</span>((reg) => {
+        <span class="cmt">// Check for SW updates every 60 minutes</span>
+        <span class="fn">setInterval</span>(() => reg.<span class="fn">update</span>(), <span class="num">60</span> * <span class="num">60</span> * <span class="num">1000</span>);
+      });
+  });
+}</code></pre>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s5"><span class="section-num">5</span>How to Generate Icons</h2>
+
+    <p>PNG icon files are required but cannot be generated automatically in the codebase. Use this one-time command after deployment setup:</p>
+
+    <pre><code><span class="cmt"># Install the generator tool globally</span>
+npm install -g pwa-asset-generator
+
+<span class="cmt"># Generate all icon sizes from the SVG source</span>
+npx pwa-asset-generator public/icons/icon.svg public/icons \
+  --background <span class="str">"#111111"</span> \
+  --padding <span class="str">"20%"</span> \
+  --manifest public/manifest.json \
+  --index index.html</code></pre>
+
+    <div class="callout success">
+      <span class="callout-icon">✅</span>
+      <p>This command automatically updates <code>manifest.json</code> with all icon paths and injects <code>&lt;link rel="apple-touch-icon"&gt;</code> tags into <code>index.html</code>. No manual editing needed.</p>
+    </div>
+
+    <h4>Required Files in public/icons/</h4>
+    <table>
+      <tr><th>File</th><th>Size</th><th>Used By</th></tr>
+      <tr><td><code>icon.svg</code></td><td>Any</td><td>Browser tab favicon (already created)</td></tr>
+      <tr><td><code>apple-touch-icon.png</code></td><td>180×180</td><td>iOS Home Screen icon (default)</td></tr>
+      <tr><td><code>apple-touch-icon-120.png</code></td><td>120×120</td><td>iOS older devices (iPhone SE 1st gen etc.)</td></tr>
+      <tr><td><code>apple-touch-icon-152.png</code></td><td>152×152</td><td>iPad home screen</td></tr>
+      <tr><td><code>apple-touch-icon-180.png</code></td><td>180×180</td><td>iPhone 6+ and all current iPhones</td></tr>
+      <tr><td><code>icon-192.png</code></td><td>192×192</td><td>Android home screen + install prompt</td></tr>
+      <tr><td><code>icon-512.png</code></td><td>512×512</td><td>Android install prompt splash</td></tr>
+      <tr><td><code>icon-maskable-192.png</code></td><td>192×192</td><td>Android adaptive icon (circle/squircle shapes)</td></tr>
+      <tr><td><code>icon-maskable-512.png</code></td><td>512×512</td><td>Android adaptive icon large</td></tr>
+      <tr><td><code>favicon-32.png</code></td><td>32×32</td><td>Browser tab (legacy browsers)</td></tr>
+      <tr><td><code>favicon-16.png</code></td><td>16×16</td><td>Browser tab (very small)</td></tr>
+    </table>
+
+    <div class="callout info">
+      <span class="callout-icon">ℹ️</span>
+      <p><strong>What is a maskable icon?</strong> Android draws app icons in different shapes (circle, square, squircle) depending on the phone manufacturer's launcher. A maskable icon has extra padding on all sides (at least 10% safe zone) so the logo stays visible when Android clips it to any shape.</p>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s6"><span class="section-num">6</span>How to Generate Splash Screens</h2>
+
+    <p>iOS requires a separate PNG splash image for every iPhone screen size. Without them, the user sees a white flash on launch.</p>
+    <pre><code><span class="cmt"># Generate all splash screens from the icon SVG</span>
+npx pwa-asset-generator public/icons/icon.svg public/splash \
+  --splash-only \
+  --background <span class="str">"#ffffff"</span> \
+  --dark-mode-background <span class="str">"#0d0d0d"</span></code></pre>
+
+    <h4>Splash Sizes Already Referenced in index.html</h4>
+    <table>
+      <tr><th>iPhone Models</th><th>Resolution</th><th>Device Width</th></tr>
+      <tr><td>SE (2nd/3rd gen), iPhone 8</td><td>750×1334</td><td>375px @2x</td></tr>
+      <tr><td>iPhone 12 / 13 / 14</td><td>1170×2532</td><td>390px @3x</td></tr>
+      <tr><td>iPhone 14 Pro / 15 / 15 Pro</td><td>1179×2556</td><td>393px @3x</td></tr>
+      <tr><td>iPhone 14 Plus / 15 Plus / 15 Pro Max</td><td>1290×2796</td><td>430px @3x</td></tr>
+      <tr><td>iPhone 13 Pro Max / 14 Plus</td><td>1284×2778</td><td>428px @3x</td></tr>
+    </table>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s7"><span class="section-num">7</span>How to Test on iPhone</h2>
+
+    <h3>Method 1 — Safari on Real iPhone (Essential)</h3>
+    <ol>
+      <li>Run <code>npm run build</code> then deploy to any server (Netlify, Vercel, your server).</li>
+      <li>Open the URL in <strong>Safari</strong> on iPhone (must be Safari — Chrome iOS cannot install PWAs).</li>
+      <li>Tap the <strong>Share button</strong> (box with an up arrow at the bottom).</li>
+      <li>Scroll down and tap <strong>"Add to Home Screen"</strong>.</li>
+      <li>Tap <strong>"Add"</strong>.</li>
+      <li>Close Safari completely (swipe up from bottom, swipe Safari off screen).</li>
+      <li>Open the app from the home screen icon.</li>
+    </ol>
+    <p><strong>What to verify:</strong> No browser chrome (no address bar), status bar text overlays the app, app icon shows correctly, splash screen appears on cold launch, no white gaps around notch or home indicator.</p>
+
+    <h3>Method 2 — Safari Remote DevTools from Mac (Best for Debugging)</h3>
+    <ol>
+      <li>On iPhone: <strong>Settings → Safari → Advanced → Web Inspector</strong> → turn ON.</li>
+      <li>Connect iPhone to Mac via USB cable.</li>
+      <li>On Mac: open <strong>Safari → Develop menu → [Your iPhone Name] → [Your page]</strong>.</li>
+      <li>Full Safari DevTools open — inspect DOM, read <code>env()</code> values, check network tab, debug JS.</li>
+    </ol>
+    <p>To read the actual safe area values on the current device:</p>
+    <pre><code><span class="cmt">// Paste in Safari DevTools console on the iPhone:</span>
+<span class="kw">const</span> el = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+el.style.cssText = <span class="str">'position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)'</span>;
+document.body.<span class="fn">appendChild</span>(el);
+<span class="kw">const</span> s = <span class="fn">getComputedStyle</span>(el);
+console.<span class="fn">log</span>({
+  top:    s.paddingTop,
+  right:  s.paddingRight,
+  bottom: s.paddingBottom,
+  left:   s.paddingLeft
+});
+document.body.<span class="fn">removeChild</span>(el);</code></pre>
+
+    <h3>Method 3 — Xcode Simulator (Mac only, no real device needed)</h3>
+    <ol>
+      <li>Install Xcode from the Mac App Store.</li>
+      <li>Open <strong>Xcode → menu → Open Developer Tool → Simulator</strong>.</li>
+      <li>Choose an iPhone model (e.g. iPhone 15 Pro for Dynamic Island testing).</li>
+      <li>Open <strong>Safari</strong> in the simulator and navigate to your dev server IP.</li>
+    </ol>
+
+    <h3>Testing Offline / Service Worker</h3>
+    <ol>
+      <li>Open the installed PWA on iPhone and visit a few pages.</li>
+      <li>Turn on <strong>Airplane Mode</strong>.</li>
+      <li>Close and reopen the app from the home screen.</li>
+      <li>Pages visited before should load from cache.</li>
+      <li>API calls should fail (correct — they are network-only, never cached).</li>
+    </ol>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s8"><span class="section-num">8</span>Common iOS Safari Problems &amp; How We Fixed Them</h2>
+
+    <table>
+      <tr><th>#</th><th>Problem</th><th>Cause</th><th>Fix Applied</th></tr>
+      <tr>
+        <td>1</td>
+        <td>White gap at notch or home indicator</td>
+        <td>Content doesn't extend behind notch area</td>
+        <td><code>viewport-fit=cover</code> + <code>env(safe-area-inset-*)</code> padding in <code>.dashboard-shell</code></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>White gap appears on overscroll (rubber-band)</td>
+        <td>Body background color shows through</td>
+        <td><code>body { background-color: var(--sc-shell) }</code> + <code>overscroll-behavior: none</code></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Tapping an input field zooms the page</td>
+        <td>iOS Safari auto-zooms when input font-size &lt; 16px</td>
+        <td><code>@supports (-webkit-touch-callout: none) { input { font-size: 16px } }</code></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>300ms delay on taps</td>
+        <td>Old iOS double-tap detection delay</td>
+        <td><code>* { touch-action: manipulation }</code></td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Blue highlight flash on tap</td>
+        <td>Default iOS tap color</td>
+        <td><code>* { -webkit-tap-highlight-color: transparent }</code></td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>Keyboard pushes content off-screen or causes scroll jump</td>
+        <td><code>window.innerHeight</code> doesn't shrink when iOS keyboard opens</td>
+        <td><code>useIOSViewport</code> hook listens to <code>visualViewport.resize</code> and updates <code>--vh</code></td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>Background page scrolls behind open modal</td>
+        <td>iOS ignores <code>overflow: hidden</code> on <code>body</code></td>
+        <td><code>lockBodyScroll()</code> in <code>useIOSViewport.ts</code> uses <code>position: fixed</code> instead</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>Font sizes change when rotating to landscape</td>
+        <td>iOS auto-scales fonts in landscape to improve readability</td>
+        <td><code>html { -webkit-text-size-adjust: 100% }</code></td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td>Wrong icon or no icon on Home Screen</td>
+        <td>iOS ignores <code>manifest.json</code> icons</td>
+        <td><code>&lt;link rel="apple-touch-icon"&gt;</code> tags added to <code>index.html</code></td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>Scroll feels sluggish or shows checkerboard during fast scroll</td>
+        <td>No GPU layer on scroll container</td>
+        <td><code>.sc-scrollbar { will-change: scroll-position; overscroll-behavior: contain }</code></td>
+      </tr>
+    </table>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s9"><span class="section-num">9</span>Dark Mode &amp; Theme Color</h2>
+
+    <p>The app uses a <strong>custom dark mode toggle</strong> (not the OS system setting). When the user clicks the dark/light toggle in the profile dropdown, <code>useDarkMode.ts</code> both flips CSS variables and now also updates the browser chrome color instantly.</p>
+
+    <h3>Why theme-color matters for PWA</h3>
+    <p>The <code>&lt;meta name="theme-color"&gt;</code> tag controls:</p>
+    <ul>
+      <li>Safari's browser tab area color when viewing the site normally</li>
+      <li>The status bar background when running as an installed PWA</li>
+      <li>The splash screen chrome color on Android</li>
+    </ul>
+    <p>Without dynamic updates, the browser chrome stays white even when the app switches to dark mode — a jarring mismatch. With the <code>updateThemeColorMeta()</code> call, the color updates the moment the user toggles.</p>
+
+    <h4>Color Mapping</h4>
+    <table>
+      <tr><th>Mode</th><th>theme-color value</th><th>Matches CSS token</th></tr>
+      <tr><td>Light</td><td><code>#ffffff</code></td><td><code>--sc-shell</code> in <code>:root</code></td></tr>
+      <tr><td>Dark</td><td><code>#0d0d0d</code></td><td><code>--sc-shell</code> in <code>.dark</code></td></tr>
+    </table>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s10"><span class="section-num">10</span>Service Worker Deep Dive</h2>
+
+    <h3>Lifecycle</h3>
+    <table>
+      <tr><th>Event</th><th>When it fires</th><th>What our SW does</th></tr>
+      <tr><td><code>install</code></td><td>First time SW is downloaded</td><td>Calls <code>skipWaiting()</code> to activate immediately. Pre-caches <code>/</code> (index.html)</td></tr>
+      <tr><td><code>activate</code></td><td>After install, when taking control</td><td>Calls <code>clients.claim()</code> to take control of open tabs. Deletes old cache versions</td></tr>
+      <tr><td><code>fetch</code></td><td>Every network request from the app</td><td>Intercepts and applies the correct caching strategy (see table in Section 3)</td></tr>
+    </table>
+
+    <h3>How Updates Work</h3>
+    <ol>
+      <li>You deploy a new version of the app (new JS/CSS files).</li>
+      <li>User visits the site — browser downloads the new <code>sw.js</code> in the background.</li>
+      <li>New SW enters "waiting" state while the old SW is still active.</li>
+      <li>Because we call <code>skipWaiting()</code>, the new SW activates immediately.</li>
+      <li>Old caches (previous version key) are deleted in the <code>activate</code> handler.</li>
+      <li>User gets fresh assets on the next page navigation.</li>
+    </ol>
+
+    <div class="callout warning">
+      <span class="callout-icon">⚠️</span>
+      <p><strong>Remember to bump <code>CACHE_VERSION</code></strong> in <code>public/sw.js</code> when deploying a breaking change (e.g. renamed routes, changed API format). Change <code>'v1'</code> → <code>'v2'</code>. This forces all old caches to be cleared.</p>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────── -->
+    <h2 id="s11"><span class="section-num">11</span>Full Checklist</h2>
+    <p>Use this checklist when deploying or setting up PWA on a new project.</p>
+
+    <h3>HTML (index.html)</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span><code>viewport-fit=cover</code> in viewport meta tag</li>
+      <li><span class="checkbox"></span><code>&lt;link rel="manifest"&gt;</code> linked</li>
+      <li><span class="checkbox"></span><code>apple-mobile-web-app-capable</code> = yes</li>
+      <li><span class="checkbox"></span><code>apple-mobile-web-app-status-bar-style</code> = black-translucent</li>
+      <li><span class="checkbox"></span><code>apple-mobile-web-app-title</code> set</li>
+      <li><span class="checkbox"></span><code>format-detection</code> = telephone=no, date=no</li>
+      <li><span class="checkbox"></span><code>theme-color</code> meta tags (one for light, one for dark media query)</li>
+      <li><span class="checkbox"></span>Apple touch icon links (minimum 180×180)</li>
+      <li><span class="checkbox"></span>Splash screen links for all key iPhone sizes</li>
+      <li><span class="checkbox"></span>SVG favicon linked</li>
+    </ul>
+
+    <h3>manifest.json</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span><code>display: "standalone"</code></li>
+      <li><span class="checkbox"></span><code>start_url: "/"</code></li>
+      <li><span class="checkbox"></span><code>scope: "/"</code></li>
+      <li><span class="checkbox"></span>Icons: 192×192, 512×512, maskable variants</li>
+      <li><span class="checkbox"></span><code>background_color</code> matches app shell</li>
+      <li><span class="checkbox"></span><code>theme_color</code> matches app shell (light)</li>
+    </ul>
+
+    <h3>CSS (index.css)</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span><code>html { -webkit-text-size-adjust: 100% }</code></li>
+      <li><span class="checkbox"></span><code>body { overscroll-behavior: none }</code></li>
+      <li><span class="checkbox"></span><code>body { background-color: var(--sc-shell) }</code></li>
+      <li><span class="checkbox"></span><code>* { -webkit-tap-highlight-color: transparent }</code></li>
+      <li><span class="checkbox"></span><code>* { touch-action: manipulation }</code></li>
+      <li><span class="checkbox"></span>Input font-size 16px on iOS via <code>@supports (-webkit-touch-callout: none)</code></li>
+      <li><span class="checkbox"></span><code>.dashboard-shell</code> class with <code>env(safe-area-inset-*)</code> padding</li>
+      <li><span class="checkbox"></span><code>100dvh</code> height with <code>100svh</code> fallback</li>
+      <li><span class="checkbox"></span><code>.sc-scrollbar { overscroll-behavior: contain }</code></li>
+      <li><span class="checkbox"></span>Mobile touch targets: <code>min-height: 44px</code> on buttons</li>
+    </ul>
+
+    <h3>Icons (PNG files needed)</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span><code>public/icons/apple-touch-icon.png</code> (180×180)</li>
+      <li><span class="checkbox"></span><code>public/icons/icon-192.png</code></li>
+      <li><span class="checkbox"></span><code>public/icons/icon-512.png</code></li>
+      <li><span class="checkbox"></span><code>public/icons/icon-maskable-192.png</code></li>
+      <li><span class="checkbox"></span><code>public/icons/icon-maskable-512.png</code></li>
+      <li><span class="checkbox"></span><code>public/splash/splash-*.png</code> (5+ sizes)</li>
+    </ul>
+
+    <h3>Service Worker</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span>Registered in <code>main.tsx</code> (production-only guard)</li>
+      <li><span class="checkbox"></span>Cache version bumped on breaking deploys</li>
+      <li><span class="checkbox"></span>API origins excluded from caching</li>
+      <li><span class="checkbox"></span>Navigation requests fall back to cached index.html</li>
+    </ul>
+
+    <h3>React Hooks</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span><code>useIOSViewport()</code> called in <code>DashboardLayout.tsx</code></li>
+      <li><span class="checkbox"></span><code>useDarkMode()</code> calls <code>updateThemeColorMeta()</code> on every toggle</li>
+      <li><span class="checkbox"></span><code>lockBodyScroll()</code> used inside modals that open on iOS</li>
+    </ul>
+
+    <h3>Testing</h3>
+    <ul class="checklist">
+      <li><span class="checkbox"></span>Tested in Safari on real iPhone</li>
+      <li><span class="checkbox"></span>"Add to Home Screen" — app opens without browser chrome</li>
+      <li><span class="checkbox"></span>Status bar blends with app (no white bar at top)</li>
+      <li><span class="checkbox"></span>Content is not hidden behind Dynamic Island or notch</li>
+      <li><span class="checkbox"></span>Home indicator bar is not blocking bottom content</li>
+      <li><span class="checkbox"></span>Tapping an input field does NOT zoom the page</li>
+      <li><span class="checkbox"></span>App works in landscape orientation without overflow</li>
+      <li><span class="checkbox"></span>Dark mode toggle updates browser chrome color immediately</li>
+      <li><span class="checkbox"></span>App loads cached content when in Airplane Mode</li>
+      <li><span class="checkbox"></span>Tested on iPhone SE (375px — smallest current iPhone)</li>
+      <li><span class="checkbox"></span>Tested on iPhone 15 Pro Max (430px — largest current iPhone)</li>
+      <li><span class="checkbox"></span>Tested on Android Chrome (verify nothing is broken)</li>
+    </ul>
+
+    <hr />
+    <p style="font-size:12px; color: var(--text-muted); margin-top:0;">
+      Zynkly Admin &nbsp;·&nbsp; PWA &amp; iOS Safari Guide &nbsp;·&nbsp; May 2026
+    </p>
+
+  </main>
+</div>
+</body>
+</html>
