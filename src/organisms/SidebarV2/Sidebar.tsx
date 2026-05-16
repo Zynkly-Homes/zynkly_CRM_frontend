@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed: collapsedProp, onCo
       {/* ── Desktop sidebar ── */}
       {!isMobile && (
         <aside
-          style={{ height: "100%", width: "100%", background: "var(--sb-bg)", display: "flex", flexDirection: "column" }}
+          style={{ height: "100%", width: "100%", background: "var(--sb-bg)", display: "flex", flexDirection: "column", fontFamily: "'Bricolage Grotesque', sans-serif" }}
           onMouseEnter={() => collapsed && setSidebarHovered(true)}
           onMouseLeave={() => setSidebarHovered(false)}
         >
@@ -88,10 +88,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed: collapsedProp, onCo
           {/* Collapsed: symmetric horizontal padding so icons sit centred under logo.
               Expanded:  8px each side for label breathing room.              */}
           <nav
-            style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "4px 6px" }}
+            style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 8px" }}
             className="sc-scrollbar"
           >
-            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
               <NavList {...navListProps} />
             </ul>
           </nav>

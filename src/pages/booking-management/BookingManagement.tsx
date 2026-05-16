@@ -12,6 +12,7 @@ import {
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, deleteData } from "../../services/crmServices";
+import { emitNavDone } from "../../atoms/NavigationProgress";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
 import type { RootState } from "../../store";
@@ -315,6 +316,7 @@ const BookingManagement: React.FC = () => {
         showToastnew.error("Failed to fetch bookings");
       } finally {
         append ? setLoadingMore(false) : setLoading(false);
+        if (!append) requestAnimationFrame(() => requestAnimationFrame(() => emitNavDone()));
       }
     },
     [apiKey, cookies.t, buildParams, dispatch],

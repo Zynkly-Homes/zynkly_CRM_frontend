@@ -92,12 +92,12 @@ button, nav, header, aside, label, [role="button"], [role="tab"] {
   /* ── Sidebar ─────────────────────────────────────────────────────────── */
   --sb-bg:          #ffffff;
   --sb-elevated:    #ffffff;
-  --sb-hover:       #f5f5f5;
-  --sb-active:      #ebebeb;
-  --sb-text:        #1f1f1f;
-  --sb-text-dim:    #737373;
-  --sb-text-active: #0d0d0d;
-  --sb-border:      #e5e5e5;
+  --sb-hover:       #f0f0f0;
+  --sb-active:      #e8e8e8;
+  --sb-text:        #0d0d0d;
+  --sb-text-dim:    #6b6b6b;
+  --sb-text-active: #000000;
+  --sb-border:      #ebebeb;
 
   /* ── Form / Input atoms ─────────────────────────────────────────────── */
   --fi-bg:           #ffffff;
@@ -157,14 +157,14 @@ button, nav, header, aside, label, [role="button"], [role="tab"] {
   --sc-border:     #2a2a2a;
 
   /* ── Sidebar ─────────────────────────────────────────────────────────── */
-  --sb-bg:          #1c1c1c;
-  --sb-elevated:    #1a1a1a;
-  --sb-hover:       #1e1e1e;
-  --sb-active:      #262626;
-  --sb-text:        #e5e5e5;
-  --sb-text-dim:    #737373;
+  --sb-bg:          #171717;
+  --sb-elevated:    #1e1e1e;
+  --sb-hover:       #212121;
+  --sb-active:      #2a2a2a;
+  --sb-text:        #ffffff;
+  --sb-text-dim:    #8a8a9a;
   --sb-text-active: #ffffff;
-  --sb-border:      #2a2a2a;
+  --sb-border:      #2e2e2e;
 
   /* ── Form / Input atoms (dark) — ChatGPT-style, no focus ring ──────── */
   --fi-bg:           #2f2f2f;              /* ChatGPT-match input background        */
@@ -362,6 +362,112 @@ html, body {
   position: fixed;
   width: 100%;
   /* preserve scroll position via top (set by JS) */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TELEGRAM-STYLE CIRCULAR THEME TRANSITION  (View Transitions API)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   WHAT IT DOES
+   ─────────────────────────────────────────────────────────────────────────
+   Light → Dark :  a tiny dark  circle EXPANDS  from the toggle click point,
+                   growing until it covers the entire screen.
+   Dark  → Light:  the dark screen SHRINKS into a circle back to the toggle,
+                   revealing the light theme underneath as it retreats.
+
+   HOW IT WORKS
+   ─────────────────────────────────────────────────────────────────────────
+   1. useDarkMode.ts calls document.startViewTransition(callback).
+      The browser snapshots the page BEFORE and AFTER the callback.
+
+   2. Before calling startViewTransition, two CSS custom properties are set:
+        --vt-x, --vt-y   →  pixel coordinates of the toggle button click
+      And a direction attribute on <html>:
+        data-theme-dir="to-dark"   or   data-theme-dir="to-light"
+
+   3. The CSS below uses these to animate clip-path on the new/old snapshots:
+      • to-dark  →  ::view-transition-NEW expands  (circle 0px → 200vmax)
+      • to-light →  ::view-transition-OLD shrinks  (circle 200vmax → 0px)
+
+   TO CHANGE ANIMATION SPEED
+   ─────────────────────────────────────────────────────────────────────────
+   Find the two animation rules below and change the duration:
+     750ms  = current default  (smooth, recommended)
+     500ms  = fast
+     1000ms = slow / cinematic
+     1500ms = very slow
+   Change the cubic-bezier for different feel:
+     cubic-bezier(0.45, 0, 0.55, 1)  = smooth ease-in-out (current)
+     ease-in-out                     = browser default
+     cubic-bezier(0.22, 1, 0.36, 1)  = snappy spring (fast start)
+
+   FILES INVOLVED
+   ─────────────────────────────────────────────────────────────────────────
+   src/organisms/SidebarV2/hooks/useDarkMode.ts   → sets --vt-x/y, startViewTransition
+   src/organisms/SidebarV2/useMemo/components/UserProfile.tsx → passes click coords
+   src/organisms/SidebarV2/types.ts               → onToggleDarkMode(x,y) signature
+   src/index.css (this file)                      → keyframes + pseudo-element rules
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Default origin (fallback if JS hasn't set them yet) */
+:root {
+  --vt-x: 50%;
+  --vt-y: 50%;
+}
+
+/* ── Keyframe: circle grows from click point to fill screen ─────────────── */
+@keyframes theme-circle-expand {
+  from { clip-path: circle(0px     at var(--vt-x) var(--vt-y)); }
+  to   { clip-path: circle(200vmax at var(--vt-x) var(--vt-y)); }
+}
+
+/* ── Keyframe: circle shrinks from full screen back to click point ────────── */
+@keyframes theme-circle-shrink {
+  from { clip-path: circle(200vmax at var(--vt-x) var(--vt-y)); }
+  to   { clip-path: circle(0px     at var(--vt-x) var(--vt-y)); }
+}
+
+/* ── Light → Dark: new dark page expands as a circle ────────────────────── */
+/* Change 750ms below to adjust speed: 500ms=fast, 750ms=smooth, 1000ms=slow */
+html[data-theme-dir="to-dark"]::view-transition-new(root) {
+  animation: theme-circle-expand 750ms cubic-bezier(0.45, 0, 0.55, 1) forwards;
+  z-index: 10;
+  mix-blend-mode: normal;
+}
+html[data-theme-dir="to-dark"]::view-transition-old(root) {
+  animation: none;  /* old (light) page stays frozen underneath */
+  z-index: 0;
+}
+
+/* ── Dark → Light: old dark page shrinks back to click point ─────────────── */
+/* Change 750ms below to adjust speed (keep in sync with the rule above)     */
+html[data-theme-dir="to-light"]::view-transition-old(root) {
+  animation: theme-circle-shrink 750ms cubic-bezier(0.45, 0, 0.55, 1) forwards;
+  z-index: 10;
+  mix-blend-mode: normal;
+}
+html[data-theme-dir="to-light"]::view-transition-new(root) {
+  animation: none;  /* new (light) page is already visible underneath */
+  z-index: 0;
+}
+
+/* ── Kill the default cross-fade — only our clip-path animation should run ── */
+::view-transition-group(root) {
+  animation-duration: 0s;
+}
+
+/* ── Smooth CSS fallback (Firefox / older browsers) ─────────────────────── */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    background-color 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color     380ms cubic-bezier(0.4, 0, 0.2, 1),
+    color            280ms cubic-bezier(0.4, 0, 0.2, 1),
+    fill             280ms cubic-bezier(0.4, 0, 0.2, 1),
+    stroke           280ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow       380ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 /* ── Touch-friendly minimum tap targets ─────────────────────────────────── */

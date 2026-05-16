@@ -1,11 +1,8 @@
-import React from "react";
+import React, { useCallback, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useCookies } from "react-cookie";
-import { Edit, Trash2 } from "lucide-react";
-import { AdvancedTable } from "../../atoms/AdvancedTable";
-import { MyButton } from "../../atoms/MyButton";
-import { MyInput } from "../../atoms/MyInput";
-import DeleteModal from "../../atoms/DeleteModal";
+import { ListFilter, Plus, AlertTriangle } from "lucide-react";
+import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, deleteData } from "../../services/crmServices";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
@@ -13,8 +10,11 @@ import { selectAccessData } from "../../store/slices/accessSlice";
 import { scrollToTop } from "../../utils/scrollToTop";
 import type { RootState } from "../../store";
 import ApiKeyForm from "./ApiKeyForm";
+import {
+  CleanButton, CleanSearchBar, CleanSelect, CleanModal, type SelectOption,
+} from "../../atoms/my_clean_code_atoms";
 
-// ---- Types ----
+// ── Types ──────────────────────────────────────────────────────────────────
 
 interface ApiKeyApiItem {
   _id: string;
@@ -52,7 +52,7 @@ export type ApiKeyItem = {
 
 type DeleteModalState = { isOpen: boolean; id: string | null; name: string };
 
-// ---- Helpers ----
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function mapApiKey(k: ApiKeyApiItem): ApiKeyItem {
   return {
@@ -72,75 +72,128 @@ function extractErrorMessage(err: unknown): string {
   return e?.error?.response?.data?.message ?? e?.message ?? "Operation failed";
 }
 
-function StatusBadge({ is_active }: { is_active: boolean }) {
-  const cls = is_active
-    ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300"
-    : "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300";
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${cls}`}>
-      {is_active ? "Active" : "Inactive"}
-    </span>
-  );
-}
-
 function formatDate(iso?: string): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-const CLOSE_DELETE: DeleteModalState = { isOpen: false, id: null, name: "" };
+function StatusBadge({ is_active }: { is_active: boolean }) {
+  return (
+    <span style={{
+      padding: "2px 8px", borderRadius: 99, fontSize: 11, fontWeight: 600,
+      background: is_active ? "var(--badge-green-bg)" : "var(--badge-red-bg)",
+      color:      is_active ? "var(--badge-green-text)" : "var(--badge-red-text)",
+    }}>
+      {is_active ? "Active" : "Inactive"}
+    </span>
+  );
+}
 
-// ---- Component ----
+// ── Statics ────────────────────────────────────────────────────────────────
+
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: "true",  label: "Active"   },
+  { value: "false", label: "Inactive" },
+];
+
+const panelStyle: React.CSSProperties = {
+  position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+  background: "var(--fi-bg-panel)", border: "1px solid var(--fi-border)",
+  borderRadius: "var(--fi-radius)", boxShadow: "0 4px 20px rgba(0,0,0,0.10)", padding: 12,
+};
+
+const CLOSE_DELETE: DeleteModalState = { isOpen: false, id: null, name: "" };
+const PER_PAGE = 25;
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 const ApiKeyManagement: React.FC = () => {
   const [cookies] = useCookies(["t"]);
-  const dispatch   = useDispatch();
-  const apiKey     = useSelector((s: RootState) => selectApiKey(s));
-  const access     = useSelector((s: RootState) => selectAccessData(s));
-  const perms      = (access?.["api_key_management"] ?? {}) as Record<string, boolean>;
+  const dispatch  = useDispatch();
+  const apiKey    = useSelector((s: RootState) => selectApiKey(s));
+  const access    = useSelector((s: RootState) => selectAccessData(s));
+  const perms     = (access?.["api_key_management"] ?? {}) as Record<string, boolean>;
 
-  const [data, setData]               = React.useState<ApiKeyItem[]>([]);
-  const [search, setSearch]           = React.useState("");
+  const [data,            setData]            = React.useState<ApiKeyItem[]>([]);
+  const [search,          setSearch]          = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [page, setPage]               = React.useState(1);
-  const [perPage, setPerPage]         = React.useState(25);
-  const [total, setTotal]             = React.useState(0);
-  const [loading, setLoading]         = React.useState(false);
-  const [showForm, setShowForm]       = React.useState(false);
-  const [editItem, setEditItem]       = React.useState<ApiKeyItem | null>(null);
-  const [deleteModal, setDeleteModal] = React.useState<DeleteModalState>(CLOSE_DELETE);
-  const [deleteLoading, setDeleteLoading] = React.useState(false);
+  const [statusFilter,    setStatusFilter]    = React.useState("");
+  const [total,           setTotal]           = React.useState(0);
+  const [loading,         setLoading]         = React.useState(false);
+  const [loadingMore,     setLoadingMore]     = React.useState(false);
+  const [hasMore,         setHasMore]         = React.useState(false);
+  const [showModal,       setShowModal]       = React.useState(false);
+  const [editItem,        setEditItem]        = React.useState<ApiKeyItem | null>(null);
+  const [deleteModal,     setDeleteModal]     = React.useState<DeleteModalState>(CLOSE_DELETE);
+  const [deleteLoading,   setDeleteLoading]   = React.useState(false);
+  const [showFilterPanel, setShowFilterPanel] = React.useState(false);
+
+  const pageRef        = useRef(1);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search.trim()), 350);
     return () => clearTimeout(id);
   }, [search]);
 
-  const fetchList = React.useCallback(async () => {
-    if (!apiKey) { dispatch(openApiKeyModal(false)); return; }
-    setLoading(true);
-    try {
-      const res = await getData<ApiKeysApiResponse>({
-        endpoint: "api-keys",
-        token: cookies.t,
-        instance: "identity",
-        params: { page, limit: perPage, search: debouncedSearch },
-      });
-      setData(res.data.data.map(mapApiKey));
-      setTotal(res.data.total);
-    } catch {
-      showToastnew.error("Failed to fetch API keys");
-    } finally {
-      setLoading(false);
-    }
-  }, [apiKey, cookies.t, debouncedSearch, page, perPage, dispatch]);
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node))
+        setShowFilterPanel(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-  React.useEffect(() => { fetchList(); }, [fetchList]);
+  const buildParams = useCallback(
+    (page: number) => ({
+      page, limit: PER_PAGE,
+      search:    debouncedSearch || undefined,
+      is_active: statusFilter   || undefined,
+    }),
+    [debouncedSearch, statusFilter],
+  );
 
-  const handleRowAction = (action: string, row: ApiKeyItem) => {
-    if (action === "edit")   { scrollToTop(); setEditItem(row); setShowForm(true); }
-    if (action === "delete") { setDeleteModal({ isOpen: true, id: row._id, name: row.name }); }
-  };
+  const fetchPage = useCallback(
+    async (page: number, append: boolean) => {
+      if (!apiKey) { dispatch(openApiKeyModal(false)); return; }
+      append ? setLoadingMore(true) : setLoading(true);
+      try {
+        const res = await getData<ApiKeysApiResponse>({
+          endpoint: "api-keys",
+          token: cookies.t,
+          instance: "identity",
+          params: buildParams(page),
+        });
+        const items = res.data.data.map(mapApiKey);
+        setData((prev) => (append ? [...prev, ...items] : items));
+        setTotal(res.data.total);
+        setHasMore(page < res.data.totalPages);
+        pageRef.current = page;
+      } catch {
+        showToastnew.error("Failed to fetch API keys");
+      } finally {
+        append ? setLoadingMore(false) : setLoading(false);
+      }
+    },
+    [apiKey, cookies.t, buildParams, dispatch],
+  );
+
+  React.useEffect(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
+
+  const handleLoadMore = useCallback(() => fetchPage(pageRef.current + 1, true), [fetchPage]);
+  const handleRefresh  = useCallback(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
+
+  const handleEdit   = useCallback((row: ApiKeyItem) => { scrollToTop(); setEditItem(row); setShowModal(true); }, []);
+  const handleDelete = useCallback((row: ApiKeyItem) => {
+    setDeleteModal({ isOpen: true, id: row._id, name: row.name });
+  }, []);
+
+  const handleBulkDelete = useCallback(async (ids: (string | number)[]) => {
+    await Promise.all(ids.map((id) => deleteData({ endpoint: `api-keys/${id}`, token: cookies.t, instance: "identity" })));
+    showToastnew.success(`${ids.length} key${ids.length > 1 ? "s" : ""} deactivated`);
+    handleRefresh();
+  }, [cookies.t, handleRefresh]);
 
   const handleDeactivate = async () => {
     if (!deleteModal.id) return;
@@ -149,7 +202,7 @@ const ApiKeyManagement: React.FC = () => {
       await deleteData({ endpoint: `api-keys/${deleteModal.id}`, token: cookies.t, instance: "identity" });
       showToastnew.success("API key deactivated");
       setDeleteModal(CLOSE_DELETE);
-      await fetchList();
+      handleRefresh();
     } catch (err: unknown) {
       showToastnew.error(extractErrorMessage(err));
     } finally {
@@ -157,155 +210,172 @@ const ApiKeyManagement: React.FC = () => {
     }
   };
 
-  const columns = React.useMemo(() => {
-    const base: {
-      key: string;
-      label: string;
-      sortable: boolean;
-      render?: (v: unknown, row: ApiKeyItem) => React.ReactNode;
-    }[] = [
-      { key: "name", label: "Name", sortable: true },
-      {
-        key: "is_active",
-        label: "Status",
-        sortable: false,
-        render: (_: unknown, row: ApiKeyItem) => <StatusBadge is_active={row.is_active} />,
-      },
-      {
-        key: "usage_count",
-        label: "Usage",
-        sortable: false,
-        render: (_: unknown, row: ApiKeyItem) => (
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            {row.usage_count ?? 0}
-            {row.usage_limit != null ? ` / ${row.usage_limit}` : ""}
-          </span>
-        ),
-      },
-      {
-        key: "expires_at",
-        label: "Expires",
-        sortable: false,
-        render: (_: unknown, row: ApiKeyItem) => (
-          <span className="text-sm text-gray-600 dark:text-gray-400">{formatDate(row.expires_at)}</span>
-        ),
-      },
-      {
-        key: "createdAt",
-        label: "Created",
-        sortable: false,
-        render: (_: unknown, row: ApiKeyItem) => (
-          <span className="text-sm text-gray-500 dark:text-gray-500">{formatDate(row.createdAt)}</span>
-        ),
-      },
-    ];
+  const activeFilterCount = statusFilter ? 1 : 0;
 
-    if (perms.edit || perms.delete) {
-      base.push({
-        key: "actions",
-        label: "Actions",
-        sortable: false,
-        render: (_: unknown, row: ApiKeyItem) => (
-          <div className="flex items-center gap-1">
-            {perms.edit && (
-              <button
-                title="Edit"
-                onClick={() => handleRowAction("edit", row)}
-                className="p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800 transition-colors"
-                aria-label={`Edit ${row.name}`}
-              >
-                <Edit className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {perms.delete && (
-              <button
-                title="Deactivate"
-                onClick={() => handleRowAction("delete", row)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
-                aria-label={`Deactivate ${row.name}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        ),
-      });
-    }
-
-    return base;
-  }, [perms]);
+  const columns = useMemo<GridColumn<ApiKeyItem>[]>(() => [
+    { field: "name",      headerName: "Name",    minWidth: 200, sortable: true },
+    {
+      field: "is_active", headerName: "Status",  minWidth: 120,
+      renderCell: ({ row }) => <StatusBadge is_active={row.is_active} />,
+    },
+    {
+      field: "usage_count", headerName: "Usage", minWidth: 130,
+      renderCell: ({ row }) => (
+        <span style={{ fontSize: 12, color: "var(--dt-dim)" }}>
+          {row.usage_count ?? 0}{row.usage_limit != null ? ` / ${row.usage_limit}` : ""}
+        </span>
+      ),
+    },
+    {
+      field: "expires_at", headerName: "Expires", minWidth: 140,
+      renderCell: ({ row }) => (
+        <span style={{ fontSize: 12, color: "var(--dt-dim)" }}>{formatDate(row.expires_at)}</span>
+      ),
+    },
+    {
+      field: "createdAt", headerName: "Created", minWidth: 140,
+      renderCell: ({ row }) => (
+        <span style={{ fontSize: 12, color: "var(--dt-muted)" }}>{formatDate(row.createdAt)}</span>
+      ),
+    },
+  ], []);
 
   return (
-    <div className="w-full max-w-full">
-      {showForm && (
-        <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
-          <div className="flex items-start justify-between px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                {editItem ? "Edit API Key" : "Create API Key"}
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {editItem ? "Update key settings" : "Keys are shown only once at creation"}
-              </p>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--dt-bg)" }}>
+
+      {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6,
+        padding: "7px 12px", borderBottom: "1px solid var(--fi-border)",
+        flexShrink: 0, flexWrap: "wrap", background: "var(--fi-bg)",
+      }}>
+
+        <CleanSearchBar
+          value={search}
+          onChange={(v) => setSearch(v)}
+          placeholder="Search API key by name"
+          width={260}
+        />
+
+        {/* Filter panel */}
+        <div style={{ position: "relative" }} ref={filterPanelRef}>
+          <CleanButton
+            variant="outline" size="sm"
+            iconLeft={<ListFilter style={{ width: 13, height: 13 }} />}
+            badge={activeFilterCount > 0 ? activeFilterCount : undefined}
+            onClick={() => setShowFilterPanel((v) => !v)}
+            style={activeFilterCount > 0 ? { borderColor: "var(--fi-border-focus)" } : undefined}
+          >
+            Filter
+          </CleanButton>
+
+          {showFilterPanel && (
+            <div style={{ ...panelStyle, minWidth: 220, display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--fi-muted)" }}>
+                Filters
+              </span>
+              <CleanSelect
+                label="Status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                options={STATUS_OPTIONS}
+                placeholder="All statuses"
+              />
+              {activeFilterCount > 0 && (
+                <CleanButton variant="danger" size="xs" onClick={() => setStatusFilter("")} style={{ width: "100%" }}>
+                  Clear filters
+                </CleanButton>
+              )}
             </div>
-            <MyButton
-              variant="outline"
-              onClick={() => { setShowForm(false); setEditItem(null); }}
-              className="!px-3 !py-1.5 text-xs flex-shrink-0 ml-4"
-            >
-              Close
-            </MyButton>
-          </div>
-          <div className="px-4 sm:px-6 py-5">
-            <ApiKeyForm
-              token={cookies.t}
-              initialValues={editItem ?? undefined}
-              onSuccess={() => { setEditItem(null); setShowForm(false); fetchList(); }}
-              onCreated={() => { fetchList(); }}
-            />
+          )}
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {perms.create && (
+          <CleanButton
+            variant="primary" size="sm"
+            iconLeft={<Plus style={{ width: 13, height: 13 }} />}
+            onClick={() => { setEditItem(null); setShowModal(true); }}
+          >
+            Create API Key
+          </CleanButton>
+        )}
+      </div>
+
+      {/* ── Table ─────────────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <CustomDatagrid<ApiKeyItem>
+          rows={data}
+          columns={columns}
+          getRowId={(row) => row._id}
+          isLoading={loading}
+          totalItems={total}
+          onScrollPagination
+          onLoadMore={handleLoadMore}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onRefresh={handleRefresh}
+          selectable={perms.delete}
+          onBulkDelete={perms.delete ? handleBulkDelete : undefined}
+          bulkDeleteLabel="Deactivate selected keys — this cannot be undone"
+          onEdit={perms.edit ? handleEdit : undefined}
+          onDelete={perms.delete ? handleDelete : undefined}
+          deleteConfirmTitle="Deactivate API key?"
+          deleteConfirmDescription="This key will be deactivated and will no longer work for API requests."
+        />
+      </div>
+
+      {/* ── Create / Edit modal ───────────────────────────────────────────────── */}
+      <CleanModal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setEditItem(null); }}
+        title={editItem ? "Edit API Key" : "Create API Key"}
+        subtitle={editItem ? "Update key settings" : "Keys are shown only once at creation"}
+        maxWidth={520}
+        zIndex={99999}
+      >
+        <ApiKeyForm
+          token={cookies.t}
+          initialValues={editItem ?? undefined}
+          onSuccess={() => { setShowModal(false); setEditItem(null); handleRefresh(); }}
+          onCreated={() => { handleRefresh(); }}
+        />
+      </CleanModal>
+
+      {/* ── Delete confirm modal ─────────────────────────────────────────────── */}
+      <CleanModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal(CLOSE_DELETE)}
+        maxWidth={400}
+        zIndex={99999}
+        closeOnBackdrop={!deleteLoading}
+        footer={
+          <>
+            <span />
+            <div style={{ display: "flex", gap: 8 }}>
+              <CleanButton variant="outline" size="sm" onClick={() => setDeleteModal(CLOSE_DELETE)} disabled={deleteLoading}>
+                Cancel
+              </CleanButton>
+              <CleanButton variant="danger" size="sm" onClick={handleDeactivate} loading={deleteLoading}>
+                Deactivate
+              </CleanButton>
+            </div>
+          </>
+        }
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <AlertTriangle style={{ width: 20, height: 20, color: "#f59e0b", flexShrink: 0 }} />
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "var(--fi-text)" }}>
+              Deactivate API Key
+            </p>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--fi-muted)", lineHeight: 1.5 }}>
+              Are you sure you want to deactivate <strong>{deleteModal.name}</strong>? This key will stop working immediately.
+            </p>
           </div>
         </div>
-      )}
-
-      <AdvancedTable
-        data={data}
-        columns={columns}
-        actions={[]}
-        onRowAction={handleRowAction}
-        pagination={{ total, page, perPage, onPageChange: setPage, onPerPageChange: setPerPage }}
-        showBuiltinSearch={false}
-        title={null}
-        loading={loading}
-        leftToolbar={
-          <MyInput
-            placeholder="Search API key by name"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full sm:w-72"
-          />
-        }
-        rightToolbar={
-          !showForm && perms.create ? (
-            <MyButton
-              variant="primary"
-              onClick={() => { setEditItem(null); setShowForm(true); }}
-              className="w-full sm:w-auto whitespace-nowrap"
-            >
-              Create API Key
-            </MyButton>
-          ) : undefined
-        }
-      />
-
-      <DeleteModal
-        isActive={deleteModal.isOpen}
-        id={deleteModal.id ?? ""}
-        name={deleteModal.name}
-        title="API Key"
-        onClose={() => setDeleteModal(CLOSE_DELETE)}
-        onClick={handleDeactivate}
-        loading={deleteLoading}
-      />
+      </CleanModal>
     </div>
   );
 };

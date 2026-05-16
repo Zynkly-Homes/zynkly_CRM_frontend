@@ -9,49 +9,49 @@ interface SidebarLogoProps {
 }
 
 const logoBox: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  borderRadius: 7,
+  width: 30,
+  height: 30,
+  borderRadius: 8,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background: "var(--sb-text-active)",
   color: "var(--sb-bg)",
   fontWeight: 800,
-  fontSize: 14,
+  fontSize: 15,
   userSelect: "none",
   flexShrink: 0,
   letterSpacing: "-0.02em",
 };
 
-const iconBtn: React.CSSProperties = {
+const collapseBtn: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   width: 28,
   height: 28,
-  borderRadius: 6,
-  border: "1px solid var(--sb-border)",
+  borderRadius: 7,
+  border: "none",
   background: "transparent",
   cursor: "pointer",
   color: "var(--sb-text-dim)",
-  transition: "background 140ms ease, color 140ms ease, border-color 140ms ease",
+  transition: "background 140ms ease, color 140ms ease",
   flexShrink: 0,
 };
 
 const SidebarLogo: React.FC<SidebarLogoProps> = ({ isCollapsed, isHovered, onCollapse, onExpand }) => {
   if (isCollapsed) {
     return (
-      <div style={{ padding: "10px 0 9px", display: "flex", justifyContent: "center", borderBottom: "1px solid var(--sb-border)" }}>
+      <div style={{ padding: "12px 0 10px", display: "flex", justifyContent: "center", borderBottom: "1px solid var(--sb-border)" }}>
         <button
           onClick={onExpand}
           aria-label="Expand sidebar"
-          style={{ ...iconBtn, width: 32, height: 32, borderRadius: 8, border: "none" }}
+          style={{ ...collapseBtn, width: 34, height: 34, borderRadius: 9 }}
           onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-hover)"; e.currentTarget.style.color = "var(--sb-text-active)"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--sb-text-dim)"; }}
         >
           {isHovered
-            ? <PanelLeftOpen style={{ width: 16, height: 16 }} />
+            ? <PanelLeftOpen style={{ width: 17, height: 17 }} />
             : <span style={logoBox}>N</span>
           }
         </button>
@@ -65,37 +65,37 @@ const SidebarLogo: React.FC<SidebarLogoProps> = ({ isCollapsed, isHovered, onCol
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "10px 10px 9px",
+        padding: "12px 12px 10px",
         borderBottom: "1px solid var(--sb-border)",
       }}
     >
       {/* Logo mark + brand name */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden", minWidth: 0 }}>
         <span style={logoBox}>N</span>
         <span
           style={{
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: 700,
             color: "var(--sb-text-active)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            letterSpacing: "-0.01em",
+            letterSpacing: "-0.02em",
           }}
         >
           Zynkly
         </span>
       </div>
 
-      {/* Collapse button — styled like Dunwork's [<] button */}
+      {/* Collapse button */}
       <button
         onClick={onCollapse}
         aria-label="Collapse sidebar"
-        style={iconBtn}
-        onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-hover)"; e.currentTarget.style.color = "var(--sb-text)"; e.currentTarget.style.borderColor = "var(--sb-text-dim)"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--sb-text-dim)"; e.currentTarget.style.borderColor = "var(--sb-border)"; }}
+        style={collapseBtn}
+        onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-hover)"; e.currentTarget.style.color = "var(--sb-text)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--sb-text-dim)"; }}
       >
-        <PanelLeftClose style={{ width: 14, height: 14 }} />
+        <PanelLeftClose style={{ width: 15, height: 15 }} />
       </button>
     </div>
   );

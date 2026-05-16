@@ -3,22 +3,22 @@ import { useLocation } from "react-router-dom";
 import { NavListProps, NavItemType } from "../../types";
 import NavItem from "./NavItem";
 
-// ── GroupHeader — bold uppercase section label (Dunwork style) ─────────────
+// ── GroupHeader — clean section label ─────────────────────────────────────
 const GroupHeader: React.FC<{ name: string; isCollapsed: boolean }> = ({ name, isCollapsed }) => {
   if (isCollapsed) {
     return (
-      <li style={{ listStyle: "none", padding: "4px 0 2px" }}>
-        <div style={{ height: 1, background: "var(--sb-border)", margin: "0 6px" }} />
+      <li style={{ listStyle: "none", padding: "6px 0 4px" }}>
+        <div style={{ height: 1, background: "var(--sb-border)", margin: "0 8px" }} />
       </li>
     );
   }
   return (
-    <li style={{ listStyle: "none", padding: "6px 8px 2px" }}>
+    <li style={{ listStyle: "none", padding: "10px 10px 3px" }}>
       <span
         style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.06em",
+          fontSize: 12,
+          fontWeight: 400,
+          letterSpacing: "0.04em",
           textTransform: "uppercase",
           color: "var(--sb-text-dim)",
           userSelect: "none",
@@ -69,11 +69,11 @@ const NavList: React.FC<NavListProps> = ({
               <ul
                 style={{
                   listStyle: "none",
-                  margin: "1px 0 1px 10px",
+                  margin: "2px 0 2px 12px",
                   padding: 0,
                   display: "flex",
                   flexDirection: "column",
-                  gap: 0,
+                  gap: 1,
                 }}
               >
                 <NavList

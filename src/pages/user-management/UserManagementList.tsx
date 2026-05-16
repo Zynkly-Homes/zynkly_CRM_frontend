@@ -5,6 +5,7 @@ import { ListFilter, Plus, AlertTriangle } from "lucide-react";
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, patchData, deleteData } from "../../services/crmServices";
+import { emitNavDone } from "../../atoms/NavigationProgress";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
 import type { RootState } from "../../store";
@@ -140,7 +141,7 @@ const UserManagementList: React.FC = () => {
         setHasMore(page < res.data.totalPages);
         pageRef.current = page;
       } catch { showToastnew.error("Failed to fetch users"); }
-      finally   { append ? setLoadingMore(false) : setLoading(false); }
+      finally   { append ? setLoadingMore(false) : setLoading(false); if (!append) requestAnimationFrame(() => requestAnimationFrame(() => emitNavDone())); }
     },
     [apiKey, cookies.t, buildParams, dispatch],
   );

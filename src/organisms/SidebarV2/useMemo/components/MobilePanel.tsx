@@ -13,15 +13,19 @@ interface MobilePanelProps extends Omit<UserProfileProps, "isCollapsed"> {
 
 // ── MobilePanelHeader ──────────────────────────────────────────────────────
 const MobilePanelHeader: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-  <div style={{ padding: "12px 12px", display: "flex", alignItems: "center", justifyContent: "flex-end", borderBottom: "1px solid var(--sb-border)" }}>
+  <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--sb-border)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--sb-text-active)", color: "var(--sb-bg)", fontWeight: 800, fontSize: 15, flexShrink: 0 }}>N</div>
+      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sb-text-active)", letterSpacing: "-0.02em" }}>Zynkly</span>
+    </div>
     <button
       onClick={onClose}
       aria-label="Close menu"
-      style={{ padding: 6, borderRadius: "50%", border: "none", background: "transparent", cursor: "pointer", color: "var(--sb-text)", display: "flex", alignItems: "center", justifyContent: "center" }}
-      onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-hover)"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+      style={{ padding: 6, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", color: "var(--sb-text-dim)", display: "flex", alignItems: "center", justifyContent: "center" }}
+      onMouseEnter={e => { e.currentTarget.style.background = "var(--sb-hover)"; e.currentTarget.style.color = "var(--sb-text)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--sb-text-dim)"; }}
     >
-      <X style={{ width: 18, height: 18 }} />
+      <X style={{ width: 17, height: 17 }} />
     </button>
   </div>
 );

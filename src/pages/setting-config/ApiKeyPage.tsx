@@ -3,19 +3,31 @@ import { Key } from "lucide-react";
 import ApiKeyManagement from "./ApiKeyManagement";
 
 const ApiKeyPage: React.FC = () => (
-  <div className="globalPadding">
-    <div className="flex items-center gap-4 mb-6">
-      <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
-        <Key className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+  <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--dt-bg)" }}>
+
+    {/* ── Header ──────────────────────────────────────────────────────────── */}
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "8px 14px", borderBottom: "1px solid var(--sc-border)",
+      flexShrink: 0, background: "var(--sc-card)",
+    }}>
+      <div style={{
+        width: 30, height: 30, borderRadius: 7,
+        background: "rgba(99,102,241,0.12)",
+        display: "flex", alignItems: "center", justifyContent: "center", color: "#6366f1",
+      }}>
+        <Key size={15} />
       </div>
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">API Key Management</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Manage your platform API keys and access credentials
-        </p>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dt-text)", lineHeight: 1.2 }}>API Key Management</div>
+        <div style={{ fontSize: 11, color: "var(--dt-muted)" }}>Manage your platform API keys and access credentials</div>
       </div>
     </div>
-    <ApiKeyManagement />
+
+    {/* ── Content ──────────────────────────────────────────────────────────── */}
+    <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <ApiKeyManagement />
+    </div>
   </div>
 );
 

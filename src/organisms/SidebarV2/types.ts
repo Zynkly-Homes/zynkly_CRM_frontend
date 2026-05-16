@@ -25,7 +25,7 @@ export interface UserProfileProps {
   isDarkMode: boolean;
   profileDropdownOpen: boolean;
   onToggleDropdown: () => void;
-  onToggleDarkMode: () => void;
+  onToggleDarkMode: (x: number, y: number) => void;
   onProfileClick: () => void;
   onLogoutClick: () => void;
 }

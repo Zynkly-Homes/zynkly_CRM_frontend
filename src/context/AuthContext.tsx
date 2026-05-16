@@ -2,7 +2,9 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
@@ -67,6 +69,7 @@ type LoginBody = { email?: string; mobile?: string; password: string };
 type AuthContextType = {
   isAuthenticated: boolean;
   isLoading: boolean;
+  initDone: boolean;
   user: User;
   token: string | null;
   login: (body: LoginBody) => Promise<void>;
@@ -123,6 +126,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const token = cookies?.t ? String(cookies.t) : null;
   const isAuthenticated = !!token;
 
+  // On page refresh the Redux store is empty even though the cookie still exists.
+  // We track whether the init fetch is in flight so ProtectedRoute waits for it.
+  const [initDone, setInitDone] = useState(!token); // if no token, nothing to init
+  const initRef = useRef(false);
+
   const user = useMemo<User>(() => {
     if (!userData.user_id) return null;
     return {
@@ -150,6 +158,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     [dispatch]
   );
+
+  // Run once on mount: if token exists but Redux store is empty (page refresh),
+  // re-fetch the profile so role/access data is restored before any route check.
+  useEffect(() => {
+    if (!token || userData.user_id || initRef.current) {
+      setInitDone(true);
+      return;
+    }
+    initRef.current = true;
+    setIsLoading(true);
+    fetchProfileApi(token)
+      .then((res) => applyProfile(res.data))
+      .catch(() => {
+        removeCookie("t", { path: "/" });
+      })
+      .finally(() => {
+        setIsLoading(false);
+        setInitDone(true);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = useCallback(
     async ({ email, password }: LoginBody) => {
@@ -185,8 +214,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [dispatch, removeCookie, navigate]);
 
   const value = useMemo<AuthContextType>(
-    () => ({ isAuthenticated, isLoading, user, token, login, logout }),
-    [isAuthenticated, isLoading, user, token, login, logout]
+    () => ({ isAuthenticated, isLoading, initDone, user, token, login, logout }),
+    [isAuthenticated, isLoading, initDone, user, token, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
