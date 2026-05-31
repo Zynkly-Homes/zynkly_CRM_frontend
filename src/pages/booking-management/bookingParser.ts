@@ -15,6 +15,10 @@ export interface ParsedBookingFields {
   branch:                         string;
   booking_via:                    string;
   booking_created_date_and_time:  string;
+  package_name:                   string;
+  payment_method:                 string;
+  payment_amount:                 string;
+  payment_status:                 string;
 }
 
 // ── Noise — lines that contain zero useful data ────────────────────────────

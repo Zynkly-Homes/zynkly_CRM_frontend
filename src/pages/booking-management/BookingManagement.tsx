@@ -43,6 +43,10 @@ interface BookingApiItem {
   address?: string;
   booking_via: BookingVia;
   booking_status: BookingStatus;
+  package_name?: string;
+  payment_method?: string;
+  payment_amount?: number;
+  payment_status?: string;
   is_active: boolean;
   createdAt?: string;
 }
@@ -101,6 +105,17 @@ const VIA_OPTIONS: SelectOption[] = [
   { value: "whatsapp_to_crm", label: "WhatsApp" },
   { value: "call",            label: "Call" },
 ];
+
+const PAYMENT_STATUS_STYLE: Record<string, React.CSSProperties> = {
+  paid:      { background: "var(--badge-green-bg)",  color: "var(--badge-green-text)"  },
+  pending:   { background: "var(--badge-amber-bg)",  color: "var(--badge-amber-text)"  },
+  cancelled: { background: "var(--badge-red-bg)",    color: "var(--badge-red-text)"    },
+};
+
+const PAYMENT_METHOD_STYLE: Record<string, React.CSSProperties> = {
+  online: { background: "var(--badge-blue-bg)",   color: "var(--badge-blue-text)"   },
+  cash:   { background: "var(--badge-gray-bg)",   color: "var(--badge-gray-text)"   },
+};
 
 function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
@@ -182,6 +197,44 @@ const COLUMNS: GridColumn<BookingApiItem>[] = [
     headerName: "Status",
     minWidth: 160,
     renderCell: ({ row }) => <StatusBadge status={row.booking_status} />,
+  },
+  {
+    field: "package_name",
+    headerName: "Package",
+    minWidth: 140,
+    renderCell: ({ row }) => (
+      <span style={{ fontSize: 12, color: "var(--dt-dim)" }}>{row.package_name || "—"}</span>
+    ),
+  },
+  {
+    field: "payment_method",
+    headerName: "Pay Method",
+    minWidth: 120,
+    renderCell: ({ row }) => row.payment_method ? (
+      <span style={{ ...pillStyle, ...(PAYMENT_METHOD_STYLE[row.payment_method] ?? {}) }}>
+        {row.payment_method.charAt(0).toUpperCase() + row.payment_method.slice(1)}
+      </span>
+    ) : <span style={{ fontSize: 12, color: "var(--dt-muted)" }}>—</span>,
+  },
+  {
+    field: "payment_amount",
+    headerName: "Amount",
+    minWidth: 110,
+    renderCell: ({ row }) => (
+      <span style={{ fontSize: 12, color: "var(--dt-text)", fontWeight: 500 }}>
+        {row.payment_amount != null ? `₹${row.payment_amount.toLocaleString("en-IN")}` : "—"}
+      </span>
+    ),
+  },
+  {
+    field: "payment_status",
+    headerName: "Pay Status",
+    minWidth: 130,
+    renderCell: ({ row }) => row.payment_status ? (
+      <span style={{ ...pillStyle, ...(PAYMENT_STATUS_STYLE[row.payment_status] ?? {}) }}>
+        {row.payment_status.charAt(0).toUpperCase() + row.payment_status.slice(1)}
+      </span>
+    ) : <span style={{ fontSize: 12, color: "var(--dt-muted)" }}>—</span>,
   },
   {
     field: "createdAt",

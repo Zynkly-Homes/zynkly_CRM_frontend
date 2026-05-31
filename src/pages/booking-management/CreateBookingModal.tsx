@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectAccessToken } from "../../store/slices/authSlice";
-import { Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { postData, patchData } from "../../services/crmServices";
 import { parseBookingRawText, ParsedBookingFields } from "./bookingParser";
@@ -47,6 +47,10 @@ export interface InitialBookingData {
   branch?:           string;
   booking_via?:      BookingVia;
   booking_status?:   BookingStatus;
+  package_name?:     string;
+  payment_method?:   string;
+  payment_amount?:   number;
+  payment_status?:   string;
   is_active?:        boolean;
   createdAt?:        string;
 }
@@ -85,6 +89,17 @@ const BOOKING_STATUS_OPTIONS: SelectOption[] = [
   { value: "cancelled_by_admin_crm",label: "Cancelled (Admin)" },
 ];
 
+const PAYMENT_METHOD_OPTIONS: SelectOption[] = [
+  { value: "online", label: "Online" },
+  { value: "cash",   label: "Cash"   },
+];
+
+const PAYMENT_STATUS_OPTIONS: SelectOption[] = [
+  { value: "paid",      label: "Paid"      },
+  { value: "pending",   label: "Pending"   },
+  { value: "cancelled", label: "Cancelled" },
+];
+
 const ABANDON_COPY: Record<AbandonReason, { title: string; body: string; confirm: string }> = {
   close: {
     title:   "Discard unsaved bookings?",
@@ -108,8 +123,12 @@ function emptyFields(): BookingFields {
   const p   = (n: number) => String(n).padStart(2, "0");
   return {
     user_name: "", user_phone: "", address: "", live_location_url: "",
-    branch:    "jalandhar",
-    booking_via: "whatsapp_to_crm",
+    branch:          "jalandhar",
+    booking_via:     "whatsapp_to_crm",
+    package_name:    "",
+    payment_method:  "online",
+    payment_amount:  "",
+    payment_status:  "paid",
     booking_created_date_and_time:
       `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`,
   };
@@ -141,7 +160,12 @@ function buildPayload(
     user_phone: entry.fields.user_phone,
     address:   entry.fields.address,
     live_location_url: entry.fields.live_location_url || undefined,
-    booking_via: entry.fields.booking_via,
+    booking_via:    entry.fields.booking_via,
+    package_name:   entry.fields.package_name   || undefined,
+    payment_method: entry.fields.payment_method || undefined,
+    payment_amount: entry.fields.payment_amount !== ""
+      ? Number(entry.fields.payment_amount) : undefined,
+    payment_status: entry.fields.payment_status || undefined,
     booking_created_date_and_time: entry.fields.booking_created_date_and_time
       ? new Date(entry.fields.booking_created_date_and_time).toISOString()
       : new Date().toISOString(),
@@ -153,6 +177,78 @@ function extractErrorMessage(err: unknown): string {
   if (Array.isArray(data?.errors) && data.errors.length > 0)
     return (data.errors as string[]).join(" · ");
   return data?.message ?? (err as any)?.message ?? "Failed to create booking";
+}
+
+// ── Map geocoding helpers ──────────────────────────────────────────────────
+
+function extractLatLngFromMapUrl(input: string): { lat: number; lng: number } | null {
+  const s = input.trim();
+  if (!s) return null;
+
+  const toLL = (a: string, b: string) => ({ lat: parseFloat(a), lng: parseFloat(b) });
+  const LAT  = "(-?\\d{1,3}\\.\\d+)";
+  const LNG  = "(-?\\d{1,3}\\.\\d+)";
+
+  // 1. Plain "lat,lng" (possibly with spaces)
+  const simple = new RegExp(`^${LAT}\\s*,\\s*${LNG}$`).exec(s);
+  if (simple) return toLL(simple[1], simple[2]);
+
+  // 2. ?q=lat,lng  &q=lat,lng
+  const qParam = new RegExp(`[?&]q=${LAT},${LNG}`).exec(s);
+  if (qParam) return toLL(qParam[1], qParam[2]);
+
+  // 3. ?ll=lat,lng  &ll=lat,lng
+  const llParam = new RegExp(`[?&]ll=${LAT},${LNG}`).exec(s);
+  if (llParam) return toLL(llParam[1], llParam[2]);
+
+  // 4. /dir/start/destination/@...  — destination is second path segment
+  const dirMatch = new RegExp(`/dir/[^/]+/${LAT},${LNG}`).exec(s);
+  if (dirMatch) return toLL(dirMatch[1], dirMatch[2]);
+
+  // 5. /@lat,lng  (map centre / place pin)
+  const atMatch = new RegExp(`/@${LAT},${LNG}`).exec(s);
+  if (atMatch) return toLL(atMatch[1], atMatch[2]);
+
+  // 6. /place/.../ lat,lng  (some share URLs embed coords in path)
+  const placeMatch = new RegExp(`/place/[^@]+@${LAT},${LNG}`).exec(s);
+  if (placeMatch) return toLL(placeMatch[1], placeMatch[2]);
+
+  // 7. ?center=lat,lng
+  const centerParam = new RegExp(`[?&]center=${LAT},${LNG}`).exec(s);
+  if (centerParam) return toLL(centerParam[1], centerParam[2]);
+
+  return null;
+}
+
+async function reverseGeocodeLatLng(lat: number, lng: number, signal?: AbortSignal): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
+      { headers: { "Accept-Language": "en", "User-Agent": "ZynklyAdminCRM/1.0" }, signal },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data) return null;
+
+    // display_name includes the POI name (hotel/shop/etc.) when mapped in OSM.
+    // Strip trailing ", India" to keep it concise.
+    if (data.display_name) {
+      return data.display_name.replace(/,\s*India\s*$/, "").trim();
+    }
+
+    if (!data.address) return null;
+    const a = data.address;
+    const parts = [
+      a.road || a.pedestrian || a.path || a.footway,
+      a.suburb || a.neighbourhood || a.quarter,
+      a.city   || a.town        || a.village || a.county,
+      a.state,
+      a.postcode,
+    ].filter(Boolean);
+    return parts.join(", ") || null;
+  } catch {
+    return null; // includes AbortError
+  }
 }
 
 // ── Storage helpers ────────────────────────────────────────────────────────
@@ -215,6 +311,46 @@ const BookingEntryCard: React.FC<{
   const setField = <K extends keyof BookingFields>(key: K, val: BookingFields[K]) =>
     onChange(entry.id, { fields: { ...entry.fields, [key]: val }, errors: { ...entry.errors, [key]: undefined } });
 
+  const entryRef   = useRef(entry);
+  useEffect(() => { entryRef.current = entry; }, [entry]);
+
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeAbort = useRef<AbortController | null>(null);
+  const [addressFetching, setAddressFetching] = useState(false);
+
+  const handleLocationUrl = (value: string) => {
+    setField("live_location_url", value);
+
+    // Cancel any pending timer and in-flight request immediately
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    if (geocodeAbort.current) { geocodeAbort.current.abort(); geocodeAbort.current = null; }
+    setAddressFetching(false);
+
+    if (!value.trim()) return;
+
+    geocodeTimer.current = setTimeout(async () => {
+      const coords = extractLatLngFromMapUrl(value);
+      if (!coords) return;
+
+      const ctrl = new AbortController();
+      geocodeAbort.current = ctrl;
+      setAddressFetching(true);
+      try {
+        const addr = await reverseGeocodeLatLng(coords.lat, coords.lng, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        if (addr) {
+          const cur = entryRef.current;
+          onChange(cur.id, {
+            fields: { ...cur.fields, live_location_url: value, address: addr },
+            errors: { ...cur.errors, live_location_url: undefined, address: undefined },
+          });
+        }
+      } finally {
+        if (!ctrl.signal.aborted) setAddressFetching(false);
+      }
+    }, 700);
+  };
+
   const hasErrors = Object.values(entry.errors).some(Boolean);
 
   return (
@@ -273,7 +409,14 @@ const BookingEntryCard: React.FC<{
               <CleanInput label="Address" required type="text"
                 value={entry.fields.address} placeholder="Building / PG Name, Room No."
                 error={entry.errors.address}
+                hint={addressFetching ? "Fetching address from map…" : undefined}
                 onChange={e => setField("address", e.target.value)} />
+            </div>
+             <div className="form-grid-full">
+              <CleanInput label="Live Location URL" type="url"
+                value={entry.fields.live_location_url} placeholder="Paste Google Maps URL or lat,lng…"
+                suffix={addressFetching ? <Loader2 style={{ width: 13, height: 13, animation: "spin 1s linear infinite" }} /> : undefined}
+                onChange={e => handleLocationUrl(e.target.value)} />
             </div>
             <CleanSelect label="Branch" required
               value={entry.fields.branch} options={BRANCH_OPTIONS}
@@ -284,10 +427,20 @@ const BookingEntryCard: React.FC<{
               error={entry.errors.booking_via}
               onChange={e => setField("booking_via", e.target.value as BookingVia)} />
             <div className="form-grid-full">
-              <CleanInput label="Live Location URL" type="url"
-                value={entry.fields.live_location_url} placeholder="https://maps.google.com/..."
-                onChange={e => setField("live_location_url", e.target.value)} />
+              <CleanInput label="Package Name" type="text"
+                value={entry.fields.package_name} placeholder="e.g. full room service like actual package…"
+                onChange={e => setField("package_name", e.target.value)} />
             </div>
+            <CleanSelect label="Payment Method"
+              value={entry.fields.payment_method} options={PAYMENT_METHOD_OPTIONS}
+              onChange={e => setField("payment_method", e.target.value)} />
+            <CleanInput label="Payment Amount" type="number"
+              value={entry.fields.payment_amount} placeholder="0"
+              onChange={e => setField("payment_amount", e.target.value)} />
+            <CleanSelect label="Payment Status"
+              value={entry.fields.payment_status} options={PAYMENT_STATUS_OPTIONS}
+              onChange={e => setField("payment_status", e.target.value)} />
+           
             <CleanInput label="Date & Time" type="datetime-local"
               value={entry.fields.booking_created_date_and_time}
               onChange={e => setField("booking_created_date_and_time", e.target.value)} />
@@ -357,13 +510,17 @@ const ClearDraftConfirm: React.FC<{ isOpen: boolean; onCancel: () => void; onCon
 // ── View / Edit mode ────────────────────────────────────────────────────────
 
 type ViewEditFields = {
-  user_name:        string;
-  user_phone:       string;
-  address:          string;
-  live_location_url:string;
-  branch:           string;
-  booking_via:      BookingVia;
-  booking_status:   BookingStatus;
+  user_name:         string;
+  user_phone:        string;
+  address:           string;
+  live_location_url: string;
+  branch:            string;
+  booking_via:       BookingVia;
+  booking_status:    BookingStatus;
+  package_name:      string;
+  payment_method:    string;
+  payment_amount:    string;
+  payment_status:    string;
 };
 
 function dataToFields(d: InitialBookingData): ViewEditFields {
@@ -373,8 +530,12 @@ function dataToFields(d: InitialBookingData): ViewEditFields {
     address:           d.address           ?? "",
     live_location_url: d.live_location_url ?? "",
     branch:            d.branch            ?? "jalandhar",
-    booking_via:       (d.booking_via      as BookingVia)     ?? "whatsapp_to_crm",
-    booking_status:    (d.booking_status   as BookingStatus)  ?? "ongoing",
+    booking_via:       (d.booking_via      as BookingVia)    ?? "whatsapp_to_crm",
+    booking_status:    (d.booking_status   as BookingStatus) ?? "completed",
+    package_name:      d.package_name   ?? "",
+    payment_method:    d.payment_method ?? "online",
+    payment_amount:    d.payment_amount != null ? String(d.payment_amount) : "",
+    payment_status:    d.payment_status ?? "paid",
   };
 }
 
@@ -391,17 +552,54 @@ const ViewEditContent: React.FC<{
   const [fields, setFields] = useState<ViewEditFields>(() => dataToFields(data));
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof ViewEditFields, string>>>({});
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeAbort = useRef<AbortController | null>(null);
+  const [addressFetching, setAddressFetching] = useState(false);
 
   // Reset form whenever a different booking is opened
   useEffect(() => {
     setFields(dataToFields(data));
     setErrors({});
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    if (geocodeAbort.current) { geocodeAbort.current.abort(); geocodeAbort.current = null; }
+    setAddressFetching(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data._id]);
 
   const setField = <K extends keyof ViewEditFields>(key: K, val: ViewEditFields[K]) => {
     setFields(prev => ({ ...prev, [key]: val }));
     setErrors(prev => ({ ...prev, [key]: undefined }));
+  };
+
+  const handleLocationUrl = (value: string) => {
+    setField("live_location_url", value);
+    if (isView) return;
+
+    // Cancel any pending timer and in-flight request immediately
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    if (geocodeAbort.current) { geocodeAbort.current.abort(); geocodeAbort.current = null; }
+    setAddressFetching(false);
+
+    if (!value.trim()) return;
+
+    geocodeTimer.current = setTimeout(async () => {
+      const coords = extractLatLngFromMapUrl(value);
+      if (!coords) return;
+
+      const ctrl = new AbortController();
+      geocodeAbort.current = ctrl;
+      setAddressFetching(true);
+      try {
+        const addr = await reverseGeocodeLatLng(coords.lat, coords.lng, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        if (addr) {
+          setFields(prev => ({ ...prev, address: addr }));
+          setErrors(prev => ({ ...prev, address: undefined }));
+        }
+      } finally {
+        if (!ctrl.signal.aborted) setAddressFetching(false);
+      }
+    }, 700);
   };
 
   const validate = () => {
@@ -428,6 +626,11 @@ const ViewEditContent: React.FC<{
           branch:            fields.branch            || undefined,
           booking_via:       fields.booking_via,
           booking_status:    fields.booking_status,
+          package_name:      fields.package_name      || undefined,
+          payment_method:    fields.payment_method    || undefined,
+          payment_amount:    fields.payment_amount !== ""
+            ? Number(fields.payment_amount) : undefined,
+          payment_status:    fields.payment_status    || undefined,
         },
       });
       showToastnew.success("Booking updated");
@@ -484,8 +687,16 @@ const ViewEditContent: React.FC<{
           <CleanInput label="Address" required type="text"
             value={fields.address} placeholder="Building / PG Name, Room No."
             error={errors.address}
+            hint={!isView && addressFetching ? "Fetching address from map…" : undefined}
             readOnly={isView} disabled={isView}
             onChange={e => setField("address", e.target.value)} />
+        </div>
+         <div className="form-grid-full">
+          <CleanInput label="Live Location URL" type="url"
+            value={fields.live_location_url} placeholder="Paste Google Maps URL or lat,lng…"
+            readOnly={isView} disabled={isView}
+            suffix={!isView && addressFetching ? <Loader2 style={{ width: 13, height: 13, animation: "spin 1s linear infinite" }} /> : undefined}
+            onChange={e => handleLocationUrl(e.target.value)} />
         </div>
 
         <CleanSelect label="Branch"
@@ -504,11 +715,28 @@ const ViewEditContent: React.FC<{
           onChange={e => setField("booking_status", e.target.value as BookingStatus)} />
 
         <div className="form-grid-full">
-          <CleanInput label="Live Location URL" type="url"
-            value={fields.live_location_url} placeholder="https://maps.google.com/..."
+          <CleanInput label="Package Name" type="text"
+            value={fields.package_name} placeholder="full room service like actual package…"
             readOnly={isView} disabled={isView}
-            onChange={e => setField("live_location_url", e.target.value)} />
+            onChange={e => setField("package_name", e.target.value)} />
         </div>
+
+        <CleanSelect label="Payment Method"
+          value={fields.payment_method} options={PAYMENT_METHOD_OPTIONS}
+          disabled={isView}
+          onChange={e => setField("payment_method", e.target.value)} />
+
+        <CleanInput label="Payment Amount" type="number"
+          value={fields.payment_amount} placeholder="0"
+          readOnly={isView} disabled={isView}
+          onChange={e => setField("payment_amount", e.target.value)} />
+
+        <CleanSelect label="Payment Status"
+          value={fields.payment_status} options={PAYMENT_STATUS_OPTIONS}
+          disabled={isView}
+          onChange={e => setField("payment_status", e.target.value)} />
+
+       
       </div>
     </CleanModal>
   );
@@ -693,7 +921,7 @@ const CreateModeContent: React.FC<{ isOpen: boolean; onClose: () => void; onCrea
     setShowClearDraft(false); setResults([]);
   };
 
-  const handleDone = useCallback(() => { clearDraft(); onClose(); }, [onClose]);
+  const handleDone = useCallback(() => { clearDraft(); onCreated(); }, [onCreated]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
