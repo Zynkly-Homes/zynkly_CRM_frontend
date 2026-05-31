@@ -1,24 +1,29 @@
 import React, { useCallback, useRef, useMemo } from "react";
-import { useCookies } from "react-cookie";
+import { selectAccessToken } from "../../store/slices/authSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { ListFilter, Plus, AlertTriangle } from "lucide-react";
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, patchData, deleteData } from "../../services/crmServices";
+import { fetchSWR, invalidatePrefix, cacheKey } from "../../lib/queryCache";
 import { emitNavDone } from "../../atoms/NavigationProgress";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
 import type { RootState } from "../../store";
 import UserForm from "./UserForm";
+import UserProfileCard, { type CardUser } from "../../atoms/UserProfileCard";
 import {
   CleanButton, CleanSearchBar, CleanSelect, CleanModal, type SelectOption,
 } from "../../atoms/my_clean_code_atoms";
+
+const USER_FORM_ID = "user-mgmt-form";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface UserApiItem {
   _id: string; username: string; email: string;
   mobile_no: string; role_id: string; is_active: boolean;
+  profile_image_url?: string | null;
   role?: { _id: string; role_name: string };
 }
 
@@ -30,6 +35,7 @@ interface UsersApiResponse {
 type UserItem = {
   _id: string; name: string; email: string;
   mobile_no?: string; role_name?: string; role_id?: string; is_active: boolean;
+  profile_image_url?: string | null;
 };
 
 type StatusState = { isOpen: boolean; id: string; name: string; is_active: boolean };
@@ -40,12 +46,58 @@ const mapUser = (u: UserApiItem): UserItem => ({
   _id: u._id, name: u.username, email: u.email,
   mobile_no: u.mobile_no, role_name: u.role?.role_name,
   role_id: u.role_id, is_active: u.is_active,
+  profile_image_url: u.profile_image_url ?? null,
 });
 
 function extractErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   const e = err as { error?: { response?: { data?: { message?: string } } }; message?: string };
   return e?.error?.response?.data?.message ?? e?.message ?? "Operation failed";
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// ── Avatar + Name cell ─────────────────────────────────────────────────────
+
+interface UserNameCellProps {
+  row: UserItem;
+  onAvatarClick: (e: React.MouseEvent<HTMLDivElement>, row: UserItem) => void;
+}
+
+function UserNameCell({ row, onAvatarClick }: UserNameCellProps) {
+  const [imgFailed, setImgFailed] = React.useState(false);
+  const url     = row.profile_image_url;
+  const showImg = !!url && !imgFailed;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div
+        onClick={(e) => { e.stopPropagation(); onAvatarClick(e, row); }}
+        title="View profile"
+        style={{
+          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+          overflow: "hidden", border: "1.5px solid var(--fi-border)",
+          background: showImg ? "transparent" : "var(--sc-surface)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer",
+          transition: "box-shadow 150ms ease",
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 0 0 2px var(--btn-primary-bg)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
+      >
+        {showImg
+          ? <img src={url!} alt={row.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setImgFailed(true)} />
+          : <span style={{ fontSize: 9, fontWeight: 700, color: "var(--fi-muted)", lineHeight: 1 }}>{getInitials(row.name)}</span>
+        }
+      </div>
+      <span style={{ fontSize: 13, color: "var(--dt-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {row.name}
+      </span>
+    </div>
+  );
 }
 
 // ── Status badge ───────────────────────────────────────────────────────────
@@ -81,7 +133,7 @@ const PER_PAGE = 25;
 // ── Component ──────────────────────────────────────────────────────────────
 
 const UserManagementList: React.FC = () => {
-  const [cookies]  = useCookies(["t"]);
+  const token = useSelector(selectAccessToken);
   const dispatch   = useDispatch();
   const apiKey     = useSelector(selectApiKey);
   const access     = useSelector((s: RootState) => selectAccessData(s));
@@ -100,9 +152,12 @@ const UserManagementList: React.FC = () => {
   const [statusModal,     setStatusModal]     = React.useState<StatusState>(CLOSE_STATUS);
   const [statusLoading,   setStatusLoading]   = React.useState(false);
   const [showFilterPanel, setShowFilterPanel] = React.useState(false);
+  const [formSubmitting,  setFormSubmitting]  = React.useState(false);
+  const [profileCard,     setProfileCard]     = React.useState<{ el: HTMLElement; user: CardUser } | null>(null);
 
   const pageRef        = useRef(1);
   const filterPanelRef = useRef<HTMLDivElement>(null);
+  const formResetRef   = useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -132,9 +187,26 @@ const UserManagementList: React.FC = () => {
       if (!apiKey) { dispatch(openApiKeyModal(false)); return; }
       append ? setLoadingMore(true) : setLoading(true);
       try {
-        const res = await getData<UsersApiResponse>({
-          endpoint: "users", token: cookies.t, instance: "identity", params: buildParams(page),
-        });
+        const params = buildParams(page);
+        const key    = cacheKey("users", params as Record<string, unknown>);
+
+        // Page 1 (non-append) uses SWR: serve cached data instantly while
+        // revalidating in background. Append / pagination always fetches fresh.
+        const tok = token ?? undefined;
+        const res = append || page > 1
+          ? await getData<UsersApiResponse>({ endpoint: "users", token: tok, instance: "identity", params })
+          : await fetchSWR<UsersApiResponse>(
+              key,
+              () => getData<UsersApiResponse>({ endpoint: "users", token: tok, instance: "identity", params }),
+              30_000, 60_000,
+              (fresh) => {
+                const freshItems = fresh.data.data.map(mapUser);
+                setData(freshItems);
+                setTotal(fresh.data.total);
+                setHasMore(1 < fresh.data.totalPages);
+              },
+            );
+
         const items = res.data.data.map(mapUser);
         setData((prev) => (append ? [...prev, ...items] : items));
         setTotal(res.data.total);
@@ -143,33 +215,33 @@ const UserManagementList: React.FC = () => {
       } catch { showToastnew.error("Failed to fetch users"); }
       finally   { append ? setLoadingMore(false) : setLoading(false); if (!append) requestAnimationFrame(() => requestAnimationFrame(() => emitNavDone())); }
     },
-    [apiKey, cookies.t, buildParams, dispatch],
+    [apiKey, token, buildParams, dispatch],
   );
 
   React.useEffect(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleLoadMore = useCallback(() => fetchPage(pageRef.current + 1, true), [fetchPage]);
-  const handleRefresh  = useCallback(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
+  const handleRefresh  = useCallback(() => { invalidatePrefix("users"); pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleEdit   = useCallback((row: UserItem) => { setEditItem(row); setShowModal(true); }, []);
   const handleDelete = useCallback(async (row: UserItem) => {
-    await deleteData({ endpoint: `users/${row._id}`, token: cookies.t, instance: "identity" });
+    await deleteData({ endpoint: `users/${row._id}`, token: token, instance: "identity" });
     showToastnew.success("User deleted");
     handleRefresh();
-  }, [cookies.t, handleRefresh]);
+  }, [token, handleRefresh]);
 
   const handleBulkDelete = useCallback(async (ids: (string | number)[]) => {
-    await Promise.all(ids.map((id) => deleteData({ endpoint: `users/${id}`, token: cookies.t, instance: "identity" })));
+    await Promise.all(ids.map((id) => deleteData({ endpoint: `users/${id}`, token: token, instance: "identity" })));
     showToastnew.success(`${ids.length} user${ids.length > 1 ? "s" : ""} deleted`);
     handleRefresh();
-  }, [cookies.t, handleRefresh]);
+  }, [token, handleRefresh]);
 
   const handleStatusToggle = async () => {
     if (!statusModal.id) return;
     setStatusLoading(true);
     try {
       await patchData({
-        endpoint: `users/${statusModal.id}`, token: cookies.t, instance: "identity",
+        endpoint: `users/${statusModal.id}`, token: token, instance: "identity",
         data: { is_active: !statusModal.is_active },
       });
       showToastnew.success(statusModal.is_active ? "User deactivated" : "User activated");
@@ -179,11 +251,26 @@ const UserManagementList: React.FC = () => {
     finally { setStatusLoading(false); }
   };
 
+  const closeCreateModal = () => { setShowModal(false); setEditItem(null); setFormSubmitting(false); };
+
   const activeFilterCount = statusFilter ? 1 : 0;
 
+  const handleAvatarClick = useCallback((e: React.MouseEvent<HTMLDivElement>, row: UserItem) => {
+    setProfileCard({
+      el:   e.currentTarget,
+      user: { name: row.name, email: row.email, role: row.role_name, profile_image_url: row.profile_image_url },
+    });
+  }, []);
+
   const columns = useMemo<GridColumn<UserItem>[]>(() => [
-    { field: "name",      headerName: "User Name", minWidth: 180, sortable: true },
-    { field: "email",     headerName: "Email",     minWidth: 220, sortable: true },
+    {
+      field: "name",
+      headerName: "User Name",
+      minWidth: 200,
+      sortable: true,
+      renderCell: ({ row }) => <UserNameCell row={row} onAvatarClick={handleAvatarClick} />,
+    },
+    { field: "email", headerName: "Email", minWidth: 220, sortable: true },
     {
       field: "role_name", headerName: "Role", minWidth: 150,
       renderCell: ({ value }) => (
@@ -215,7 +302,6 @@ const UserManagementList: React.FC = () => {
         padding: "7px 12px", borderBottom: "1px solid var(--fi-border)",
         flexShrink: 0, flexWrap: "wrap", background: "var(--fi-bg)",
       }}>
-
         <CleanSearchBar
           value={search}
           onChange={(v) => setSearch(v)}
@@ -223,7 +309,6 @@ const UserManagementList: React.FC = () => {
           width={260}
         />
 
-        {/* Filter panel */}
         <div style={{ position: "relative" }} ref={filterPanelRef}>
           <CleanButton
             variant="outline" size="sm"
@@ -292,19 +377,52 @@ const UserManagementList: React.FC = () => {
         />
       </div>
 
+      {/* ── Profile card popover ─────────────────────────────────────────────── */}
+      <UserProfileCard
+        user={profileCard?.user ?? null}
+        anchorEl={profileCard?.el ?? null}
+        onClose={() => setProfileCard(null)}
+      />
+
       {/* ── Create / Edit modal ───────────────────────────────────────────────── */}
       <CleanModal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditItem(null); }}
+        onClose={closeCreateModal}
         title={editItem ? "Edit User" : "Create User"}
         subtitle={editItem ? "Update user details" : "Add a new user account"}
         maxWidth={520}
+        expandable={false}
         zIndex={99999}
+        footer={
+          <>
+            <CleanButton
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={formSubmitting}
+              onClick={() => formResetRef.current?.()}
+            >
+              Reset
+            </CleanButton>
+            <CleanButton
+              type="submit"
+              form={USER_FORM_ID}
+              variant="primary"
+              size="sm"
+              loading={formSubmitting}
+            >
+              {editItem ? "Update User" : "Create User"}
+            </CleanButton>
+          </>
+        }
       >
         <UserForm
-          token={cookies.t}
+          formId={USER_FORM_ID}
+          token={token}
           initialValues={editItem ?? undefined}
-          onSuccess={() => { setShowModal(false); setEditItem(null); handleRefresh(); }}
+          onSuccess={() => { closeCreateModal(); handleRefresh(); }}
+          onSubmittingChange={setFormSubmitting}
+          onResetReady={(fn) => { formResetRef.current = fn; }}
         />
       </CleanModal>
 
@@ -313,6 +431,7 @@ const UserManagementList: React.FC = () => {
         isOpen={statusModal.isOpen}
         onClose={() => setStatusModal(CLOSE_STATUS)}
         maxWidth={400}
+        expandable={false}
         zIndex={99999}
         closeOnBackdrop={!statusLoading}
         footer={

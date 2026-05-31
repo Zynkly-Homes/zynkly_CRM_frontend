@@ -1,5 +1,5 @@
 /**
- * Zynkly Admin — Service Worker
+ * My Learning Admin — Service Worker
  *
  * Strategy:
  *  - Static assets (JS/CSS with Vite content hash): cache-first (immutable)

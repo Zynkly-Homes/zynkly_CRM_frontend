@@ -1,10 +1,11 @@
 import React, { useCallback, useRef, useMemo } from "react";
-import { useCookies } from "react-cookie";
+import { selectAccessToken } from "../../store/slices/authSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { Plus } from "lucide-react";
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, deleteData } from "../../services/crmServices";
+import { fetchSWR, invalidatePrefix, cacheKey } from "../../lib/queryCache";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
 import type { RootState } from "../../store";
@@ -41,7 +42,7 @@ const PER_PAGE = 25;
 // ── Component ──────────────────────────────────────────────────────────────
 
 const RoleManagement: React.FC = () => {
-  const [cookies]  = useCookies(["t"]);
+  const token = useSelector(selectAccessToken);
   const dispatch   = useDispatch();
   const apiKey     = useSelector((s: RootState) => selectApiKey(s));
   const access     = useSelector((s: RootState) => selectAccessData(s));
@@ -56,8 +57,11 @@ const RoleManagement: React.FC = () => {
   const [hasMore,         setHasMore]         = React.useState(false);
   const [showModal,       setShowModal]       = React.useState(false);
   const [editItem,        setEditItem]        = React.useState<RoleItem | null>(null);
+  const [formSubmitting,  setFormSubmitting]  = React.useState(false);
 
-  const pageRef = useRef(1);
+  const pageRef       = useRef(1);
+  const formResetRef  = useRef<(() => void) | null>(null);
+  const ROLE_FORM_ID  = "role-mgmt-form";
 
   React.useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -74,9 +78,21 @@ const RoleManagement: React.FC = () => {
       if (!apiKey) { dispatch(openApiKeyModal(false)); return; }
       append ? setLoadingMore(true) : setLoading(true);
       try {
-        const res = await getData<RolesApiResponse>({
-          endpoint: "roles", token: cookies.t, instance: "identity", params: buildParams(page),
-        });
+        const tok    = token ?? undefined;
+        const params = buildParams(page);
+        const key    = cacheKey("roles", params as Record<string, unknown>);
+        const res = append || page > 1
+          ? await getData<RolesApiResponse>({ endpoint: "roles", token: tok, instance: "identity", params })
+          : await fetchSWR<RolesApiResponse>(
+              key,
+              () => getData<RolesApiResponse>({ endpoint: "roles", token: tok, instance: "identity", params }),
+              30_000, 60_000,
+              (fresh) => {
+                setData(fresh.data.data.map(mapRole));
+                setTotal(fresh.data.total);
+                setHasMore(1 < fresh.data.totalPages);
+              },
+            );
         const items = res.data.data.map(mapRole);
         setData((prev) => (append ? [...prev, ...items] : items));
         setTotal(res.data.total);
@@ -85,26 +101,26 @@ const RoleManagement: React.FC = () => {
       } catch { showToastnew.error("Failed to fetch roles"); }
       finally   { append ? setLoadingMore(false) : setLoading(false); }
     },
-    [apiKey, cookies.t, buildParams, dispatch],
+    [apiKey, token, buildParams, dispatch],
   );
 
   React.useEffect(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleLoadMore = useCallback(() => fetchPage(pageRef.current + 1, true), [fetchPage]);
-  const handleRefresh  = useCallback(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
+  const handleRefresh  = useCallback(() => { invalidatePrefix("roles"); pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleEdit   = useCallback((row: RoleItem) => { setEditItem(row); setShowModal(true); }, []);
   const handleDelete = useCallback(async (row: RoleItem) => {
-    await deleteData({ endpoint: `roles/${row._id}`, token: cookies.t, instance: "identity" });
+    await deleteData({ endpoint: `roles/${row._id}`, token: token, instance: "identity" });
     showToastnew.success("Role deleted successfully");
     handleRefresh();
-  }, [cookies.t, handleRefresh]);
+  }, [token, handleRefresh]);
 
   const handleBulkDelete = useCallback(async (ids: (string | number)[]) => {
-    await Promise.all(ids.map((id) => deleteData({ endpoint: `roles/${id}`, token: cookies.t, instance: "identity" })));
+    await Promise.all(ids.map((id) => deleteData({ endpoint: `roles/${id}`, token: token, instance: "identity" })));
     showToastnew.success(`${ids.length} role${ids.length > 1 ? "s" : ""} deleted`);
     handleRefresh();
-  }, [cookies.t, handleRefresh]);
+  }, [token, handleRefresh]);
 
   const columns = useMemo<GridColumn<RoleItem>[]>(() => [
     { field: "role_name", headerName: "Role", minWidth: 200, sortable: true },
@@ -174,16 +190,42 @@ const RoleManagement: React.FC = () => {
       {/* ── Create / Edit modal ───────────────────────────────────────────────── */}
       <CleanModal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditItem(null); }}
+        onClose={() => { setShowModal(false); setEditItem(null); setFormSubmitting(false); }}
         title={editItem ? "Edit Role" : "Create Role"}
         subtitle="Set role name and module permissions"
         maxWidth={680}
+        expandable={false}
         zIndex={99999}
+        footer={
+          <>
+            <CleanButton
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={formSubmitting}
+              onClick={() => formResetRef.current?.()}
+            >
+              Reset
+            </CleanButton>
+            <CleanButton
+              type="submit"
+              form={ROLE_FORM_ID}
+              variant="primary"
+              size="sm"
+              loading={formSubmitting}
+            >
+              {editItem ? "Update Role" : "Create Role"}
+            </CleanButton>
+          </>
+        }
       >
         <RoleForm
-          token={cookies.t}
+          formId={ROLE_FORM_ID}
+          token={token}
           initialValues={editItem ?? undefined}
-          onSuccess={() => { setShowModal(false); setEditItem(null); handleRefresh(); }}
+          onSuccess={() => { setShowModal(false); setEditItem(null); setFormSubmitting(false); handleRefresh(); }}
+          onSubmittingChange={setFormSubmitting}
+          onResetReady={(fn) => { formResetRef.current = fn; }}
         />
       </CleanModal>
     </div>

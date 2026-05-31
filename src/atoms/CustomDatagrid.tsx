@@ -74,6 +74,12 @@ export interface CustomDatagridProps<T = Record<string, unknown>> {
   rows?: T[]
   columns?: GridColumn<T>[]
   CustomNoRowsOverlay?: React.ComponentType
+  /** Image URL shown centered in the table viewport when there are no rows */
+  emptyStateImage?: string
+  /** Title text shown below the empty state image */
+  emptyStateTitle?: string
+  /** Subtitle text shown below the title */
+  emptyStateSubtitle?: string
   getRowId?: (row: T) => string | number
   onCellClick?: (
     params: { id: string | number; field: string; value: unknown; originalValue?: unknown },
@@ -545,7 +551,7 @@ const SkeletonBodyCell: React.FC<{ col: GridColumn; width: number; min: number }
 
 // Skeleton shimmer for the checkbox column
 const SkeletonSelectHeader: React.FC = () => (
-  <th style={{ width: SELECT_COL_WIDTH, minWidth: SELECT_COL_WIDTH, padding: '0 13px', height: 37, background: 'var(--dt-header)', borderBottom: '1px solid var(--dt-border)' }}>
+  <th style={{ width: SELECT_COL_WIDTH, minWidth: SELECT_COL_WIDTH, padding: '0 13px', height: 37, textAlign: 'left', verticalAlign: 'middle', background: 'var(--dt-header)', borderBottom: '1px solid var(--dt-border)' }}>
     <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--dt-skeleton-from)', opacity: 0.5 }} />
   </th>
 )
@@ -586,7 +592,7 @@ const TableSkeleton: React.FC<{
   return (
     <div
       className="overflow-x-auto overflow-y-auto cdg-scroll"
-      style={{ flex: '1 1 0', height: 0, minHeight: 300, background: 'var(--dt-bg)' }}
+      style={{ flex: '1 1 0', height: 0, minHeight: 300, background: 'var(--dt-bg)', scrollbarWidth: 'thin', scrollbarColor: 'var(--dt-scrollbar) transparent' }}
     >
       <table className="w-full border-collapse" style={{ tableLayout: 'fixed', background: 'var(--dt-bg)' }}>
         <thead className="sticky top-0 z-10" style={{ background: 'var(--dt-header)' }}>
@@ -1061,6 +1067,9 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
   rows = [],
   columns = [],
   CustomNoRowsOverlay,
+  emptyStateImage,
+  emptyStateTitle,
+  emptyStateSubtitle,
   getRowId = DEFAULT_ROW_ID as unknown as (row: T) => string | number,
   onCellClick,
   onRowClick,
@@ -1345,6 +1354,7 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
           flex: '1 1 0', height: 0, minHeight: 300,
           scrollbarWidth: 'thin',
           scrollbarColor: 'var(--dt-scrollbar) transparent',
+          overscrollBehavior: 'contain',
         }}
       >
         <table
@@ -1361,6 +1371,8 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
                   style={{
                     width: SELECT_COL_WIDTH, minWidth: SELECT_COL_WIDTH,
                     padding: '0 13px', height: 37,
+                    textAlign: 'left',
+                    verticalAlign: 'middle',
                     background: 'var(--dt-header)',
                     borderBottom: '1px solid var(--dt-border)',
                   }}
@@ -1444,7 +1456,7 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
           {/* ── Data rows ─────────────────────────────────────────────── */}
           <tbody>
             {displayRows.length === 0
-              ? emptyRow
+              ? (emptyStateImage ? null : emptyRow)   // image overlay handles empty state when image is set
               : displayRows.map((row) => {
                 const rowId     = getRowId(row)
                 const isSelected = selectable && selectedIds.has(rowId)
@@ -1553,6 +1565,49 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
           </tbody>
         </table>
       </div>
+
+      {/* ── Empty-state overlay — fixed to viewport center, never scrolls ── */}
+      {displayRows.length === 0 && !isLoading && emptyStateImage && (
+        <div
+          style={{
+            // Covers the entire component (outer div is position:relative via className)
+            position:       'absolute',
+            inset:          0,
+            // Center the image+text without blocking header or footer clicks
+            display:        'flex',
+            flexDirection:  'column',
+            alignItems:     'center',
+            justifyContent: 'center',
+            gap:            0,
+            pointerEvents:  'none',
+            zIndex:         5,
+            paddingBottom:  40,
+          }}
+        >
+          <img
+            src={emptyStateImage}
+            alt={emptyStateTitle ?? 'No data'}
+            style={{ width: 380, height: 'auto', opacity: 0.95, userSelect: 'none' }}
+            draggable={false}
+          />
+          {emptyStateTitle && (
+            <p style={{
+              margin: 0, marginTop: -60, fontSize: 16, fontWeight: 700,
+              color: 'var(--dt-text)', textAlign: 'center',
+            }}>
+              {emptyStateTitle}
+            </p>
+          )}
+          {emptyStateSubtitle && (
+            <p style={{
+              margin: '2px 0 0', fontSize: 13,
+              color: 'var(--dt-muted)', textAlign: 'center',
+            }}>
+              {emptyStateSubtitle}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       {onScrollPagination ? (

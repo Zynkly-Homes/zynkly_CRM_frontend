@@ -4,8 +4,9 @@ import * as Yup from "yup";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { postData, patchData, getData } from "../../services/crmServices";
 import { Check } from "lucide-react";
-import { useCookies } from "react-cookie";
-import { CleanInput, CleanButton } from "../../atoms/my_clean_code_atoms";
+import { useSelector } from "react-redux";
+import { selectAccessToken } from "../../store/slices/authSlice";
+import { CleanInput } from "../../atoms/my_clean_code_atoms";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,8 +23,11 @@ type ModuleFromAPI = {
 
 type RoleFormProps = {
   token?: string;
+  formId: string;
   initialValues?: { _id?: string; role_name?: string; role_access?: any[] };
   onSuccess: () => void;
+  onSubmittingChange?: (b: boolean) => void;
+  onResetReady?: (fn: () => void) => void;
 };
 
 const PERM_FIELDS = ["create", "edit", "view", "delete", "transfer", "export"] as const;
@@ -55,21 +59,24 @@ const PermCheckbox: React.FC<{ checked: boolean; onToggle: () => void; ariaLabel
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) => {
-  const [cookies]       = useCookies(["t"]);
-  const [modules,       setModules]       = React.useState<ModuleFromAPI[]>([]);
+const RoleForm: React.FC<RoleFormProps> = ({
+  token, formId, initialValues, onSuccess, onSubmittingChange, onResetReady,
+}) => {
+  const authToken = useSelector(selectAccessToken);
+  const [modules,        setModules]        = React.useState<ModuleFromAPI[]>([]);
   const [loadingModules, setLoadingModules] = React.useState(true);
 
   React.useEffect(() => {
     setLoadingModules(true);
+    onSubmittingChange?.(true);
     getData<{ success: boolean; data: { data: ModuleFromAPI[]; total: number } }>({
-      endpoint: "modules", token: cookies.t || token, instance: "identity",
+      endpoint: "modules", token: authToken || token, instance: "identity",
       params: { page: 1, limit: 100 },
     })
       .then((res) => setModules(res?.data?.data ?? []))
       .catch(() => { showToastnew.error("Failed to load modules"); setModules([]); })
-      .finally(() => setLoadingModules(false));
-  }, [cookies.t, token]);
+      .finally(() => { setLoadingModules(false); onSubmittingChange?.(false); });
+  }, [authToken, token]);
 
   const validationSchema = Yup.object({
     role_name: Yup.string().trim().required("Role name is required"),
@@ -99,13 +106,14 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
   });
 
   const handleSubmit = async (values: any, { setSubmitting, resetForm }: any) => {
+    onSubmittingChange?.(true);
     try {
       if (initialValues?._id) {
-        await patchData({ endpoint: `roles/${initialValues._id}`, token: cookies.t || token, instance: "identity", data: buildPayload(values) });
+        await patchData({ endpoint: `roles/${initialValues._id}`, token: authToken || token, instance: "identity", data: buildPayload(values) });
         showToastnew.success("Role updated successfully");
         onSuccess();
       } else {
-        await postData({ endpoint: "roles", token: cookies.t || token, instance: "identity", data: buildPayload(values) });
+        await postData({ endpoint: "roles", token: authToken || token, instance: "identity", data: buildPayload(values) });
         showToastnew.success("Role created successfully");
         resetForm();
         onSuccess();
@@ -114,6 +122,7 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
       showToastnew.error(err?.error?.response?.data?.error || err?.data?.message || "Failed to save role");
     } finally {
       setSubmitting(false);
+      onSubmittingChange?.(false);
     }
   };
 
@@ -132,7 +141,9 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
       enableReinitialize
       onSubmit={handleSubmit}
     >
-      {({ values, errors, touched, handleChange, handleBlur, isSubmitting, setFieldValue, resetForm }) => {
+      {({ values, errors, touched, handleChange, handleBlur, setFieldValue, resetForm }) => {
+        onResetReady?.(resetForm);
+
         const togglePerm = (moduleId: string, field: keyof ModuleAccess) => {
           setFieldValue(
             "role_access",
@@ -143,7 +154,7 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
         };
 
         return (
-          <Form autoComplete="off">
+          <Form id={formId} autoComplete="off" noValidate>
             <div style={{ maxWidth: 340, marginBottom: 16 }}>
               <CleanInput
                 label="Role Name" required placeholder="Enter role name"
@@ -154,7 +165,7 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
             </div>
 
             {/* Permissions table */}
-            <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--fi-border)", marginBottom: 16 }}>
+            <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--fi-border)", marginBottom: 8 }}>
               <table style={{ width: "100%", minWidth: 580, borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "var(--dt-header)" }}>
@@ -172,10 +183,7 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
                   {(values.role_access || []).map((m: ModuleAccess, i: number) => (
                     <tr
                       key={m.module_id}
-                      style={{
-                        borderTop: i > 0 ? "1px solid var(--fi-border)" : undefined,
-                        transition: "background 120ms",
-                      }}
+                      style={{ borderTop: i > 0 ? "1px solid var(--fi-border)" : undefined, transition: "background 120ms" }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--dt-hover)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "")}
                     >
@@ -198,19 +206,10 @@ const RoleForm: React.FC<RoleFormProps> = ({ token, initialValues, onSuccess }) 
             </div>
 
             {errors.role_access && (
-              <p style={{ fontSize: 11, color: "var(--fi-border-error)", marginBottom: 12 }}>
+              <p style={{ fontSize: 11, color: "var(--fi-border-error)", marginBottom: 4 }}>
                 {String(errors.role_access)}
               </p>
             )}
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <CleanButton type="submit" variant="primary" size="sm" loading={isSubmitting}>
-                {initialValues?._id ? "Update Role" : "Create Role"}
-              </CleanButton>
-              <CleanButton type="button" variant="outline" size="sm" onClick={() => resetForm()} disabled={isSubmitting}>
-                Reset
-              </CleanButton>
-            </div>
           </Form>
         );
       }}

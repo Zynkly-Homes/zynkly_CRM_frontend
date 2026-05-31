@@ -1,10 +1,11 @@
 import React, { useCallback, useRef, useMemo } from "react";
-import { useCookies } from "react-cookie";
+import { selectAccessToken } from "../../store/slices/authSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { Plus, AlertTriangle } from "lucide-react";
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, deleteData, patchData } from "../../services/crmServices";
+import { fetchSWR, invalidatePrefix, cacheKey } from "../../lib/queryCache";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
 import type { RootState } from "../../store";
@@ -58,7 +59,7 @@ const PER_PAGE = 25;
 // ── Component ──────────────────────────────────────────────────────────────
 
 const ModuleManagement: React.FC = () => {
-  const [cookies]  = useCookies(["t"]);
+  const token = useSelector(selectAccessToken);
   const dispatch   = useDispatch();
   const apiKey     = useSelector((s: RootState) => selectApiKey(s));
   const access     = useSelector((s: RootState) => selectAccessData(s));
@@ -75,8 +76,11 @@ const ModuleManagement: React.FC = () => {
   const [editItem,        setEditItem]        = React.useState<ModuleItem | null>(null);
   const [statusModal,     setStatusModal]     = React.useState<StatusState>(CLOSE_STATUS);
   const [statusLoading,   setStatusLoading]   = React.useState(false);
+  const [formSubmitting,  setFormSubmitting]  = React.useState(false);
 
-  const pageRef = useRef(1);
+  const pageRef          = useRef(1);
+  const formResetRef     = useRef<(() => void) | null>(null);
+  const MODULE_FORM_ID   = "module-mgmt-form";
 
   React.useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -93,9 +97,21 @@ const ModuleManagement: React.FC = () => {
       if (!apiKey) { dispatch(openApiKeyModal(false)); return; }
       append ? setLoadingMore(true) : setLoading(true);
       try {
-        const res = await getData<ModulesApiResponse>({
-          endpoint: "modules", token: cookies.t, instance: "identity", params: buildParams(page),
-        });
+        const tok    = token ?? undefined;
+        const params = buildParams(page);
+        const key    = cacheKey("modules", params as Record<string, unknown>);
+        const res = append || page > 1
+          ? await getData<ModulesApiResponse>({ endpoint: "modules", token: tok, instance: "identity", params })
+          : await fetchSWR<ModulesApiResponse>(
+              key,
+              () => getData<ModulesApiResponse>({ endpoint: "modules", token: tok, instance: "identity", params }),
+              30_000, 60_000,
+              (fresh) => {
+                setData(fresh.data.data.map(mapModule));
+                setTotal(fresh.data.total);
+                setHasMore(1 < fresh.data.totalPages);
+              },
+            );
         const items = res.data.data.map(mapModule);
         setData((prev) => (append ? [...prev, ...items] : items));
         setTotal(res.data.total);
@@ -104,33 +120,33 @@ const ModuleManagement: React.FC = () => {
       } catch { showToastnew.error("Failed to fetch modules"); }
       finally   { append ? setLoadingMore(false) : setLoading(false); }
     },
-    [apiKey, cookies.t, buildParams, dispatch],
+    [apiKey, token, buildParams, dispatch],
   );
 
   React.useEffect(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleLoadMore = useCallback(() => fetchPage(pageRef.current + 1, true), [fetchPage]);
-  const handleRefresh  = useCallback(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
+  const handleRefresh  = useCallback(() => { invalidatePrefix("modules"); pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleEdit   = useCallback((row: ModuleItem) => { setEditItem(row); setShowModal(true); }, []);
   const handleDelete = useCallback(async (row: ModuleItem) => {
-    await deleteData({ endpoint: `modules/${row._id}`, token: cookies.t, instance: "identity" });
+    await deleteData({ endpoint: `modules/${row._id}`, token: token, instance: "identity" });
     showToastnew.success("Module deleted successfully");
     handleRefresh();
-  }, [cookies.t, handleRefresh]);
+  }, [token, handleRefresh]);
 
   const handleBulkDelete = useCallback(async (ids: (string | number)[]) => {
-    await Promise.all(ids.map((id) => deleteData({ endpoint: `modules/${id}`, token: cookies.t, instance: "identity" })));
+    await Promise.all(ids.map((id) => deleteData({ endpoint: `modules/${id}`, token: token, instance: "identity" })));
     showToastnew.success(`${ids.length} module${ids.length > 1 ? "s" : ""} deleted`);
     handleRefresh();
-  }, [cookies.t, handleRefresh]);
+  }, [token, handleRefresh]);
 
   const handleStatusToggle = async () => {
     if (!statusModal.id) return;
     setStatusLoading(true);
     try {
       await patchData({
-        endpoint: `modules/${statusModal.id}`, token: cookies.t, instance: "identity",
+        endpoint: `modules/${statusModal.id}`, token: token, instance: "identity",
         data: { is_active: !statusModal.is_active },
       });
       showToastnew.success(statusModal.is_active ? "Module deactivated" : "Module activated");
@@ -221,16 +237,42 @@ const ModuleManagement: React.FC = () => {
       {/* ── Create / Edit modal ───────────────────────────────────────────────── */}
       <CleanModal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditItem(null); }}
+        onClose={() => { setShowModal(false); setEditItem(null); setFormSubmitting(false); }}
         title={editItem ? "Edit Module" : "Create Module"}
         subtitle={editItem ? "Update module name or status" : "Define a new permission module"}
         maxWidth={480}
+        expandable={false}
         zIndex={99999}
+        footer={
+          <>
+            <CleanButton
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={formSubmitting}
+              onClick={() => formResetRef.current?.()}
+            >
+              Reset
+            </CleanButton>
+            <CleanButton
+              type="submit"
+              form={MODULE_FORM_ID}
+              variant="primary"
+              size="sm"
+              loading={formSubmitting}
+            >
+              {editItem ? "Update Module" : "Create Module"}
+            </CleanButton>
+          </>
+        }
       >
         <ModuleForm
-          token={cookies.t}
+          formId={MODULE_FORM_ID}
+          token={token}
           initialValues={editItem ?? undefined}
-          onSuccess={() => { setShowModal(false); setEditItem(null); handleRefresh(); }}
+          onSuccess={() => { setShowModal(false); setEditItem(null); setFormSubmitting(false); handleRefresh(); }}
+          onSubmittingChange={setFormSubmitting}
+          onResetReady={(fn) => { formResetRef.current = fn; }}
         />
       </CleanModal>
 
@@ -239,6 +281,7 @@ const ModuleManagement: React.FC = () => {
         isOpen={statusModal.isOpen}
         onClose={() => setStatusModal(CLOSE_STATUS)}
         maxWidth={400}
+        expandable={false}
         zIndex={99999}
         closeOnBackdrop={!statusLoading}
         footer={

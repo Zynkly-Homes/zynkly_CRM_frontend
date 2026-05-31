@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dark / Light Theme Transition — My Learning Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #ffffff;
+      --bg-alt:    #f7f7f8;
+      --bg-code:   #f3f4f6;
+      --border:    #e5e7eb;
+      --text:      #111827;
+      --text-dim:  #4b5563;
+      --text-muted:#6b7280;
+      --accent:    #4f46e5;
+      --accent-bg: #eef2ff;
+      --green:     #16a34a;
+      --green-bg:  #f0fdf4;
+      --amber:     #d97706;
+      --amber-bg:  #fffbeb;
+      --red:       #dc2626;
+      --red-bg:    #fef2f2;
+      --radius:    8px;
+      --font-mono: "SF Mono","Fira Code","Cascadia Code",Menlo,Consolas,monospace;
+      --font:      -apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Helvetica,Arial,sans-serif;
+    }
+
+    html { font-family: var(--font); color: var(--text); background: var(--bg); scroll-behavior: smooth; }
+    body { line-height: 1.65; font-size: 15px; }
+
+    .page-wrap  { display: flex; min-height: 100vh; }
+
+    /* ── TOC Sidebar ───────────────────────────────────────────── */
+    .toc-sidebar {
+      width: 260px; flex-shrink: 0; position: sticky; top: 0;
+      height: 100vh; overflow-y: auto; border-right: 1px solid var(--border);
+      background: var(--bg-alt); padding: 28px 0 40px;
+    }
+    .toc-header {
+      padding: 0 20px 14px; font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted);
+      border-bottom: 1px solid var(--border); margin-bottom: 8px;
+    }
+    .toc-list { list-style: none; }
+    .toc-list li a {
+      display: block; padding: 5px 20px; font-size: 13px; color: var(--text-dim);
+      text-decoration: none; border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    .toc-list li a:hover { color: var(--accent); border-left-color: var(--accent); background: var(--accent-bg); }
+    .toc-list li.sub a { padding-left: 34px; font-size: 12px; }
+
+    /* ── Main content ──────────────────────────────────────────── */
+    .content { flex: 1; min-width: 0; max-width: 860px; padding: 48px 52px; }
+
+    h1 { font-size: 30px; font-weight: 800; letter-spacing: -.03em; color: var(--text); line-height: 1.15; }
+    h2 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--text); margin-top: 52px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 15px; font-weight: 700; color: var(--text); margin-top: 28px; margin-bottom: 10px; }
+    h4 { font-size: 13px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 20px; margin-bottom: 8px; }
+
+    p  { color: var(--text-dim); margin-bottom: 14px; }
+    ul, ol { margin: 0 0 14px 20px; color: var(--text-dim); }
+    li { margin-bottom: 5px; }
+    strong { color: var(--text); font-weight: 600; }
+    a  { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    /* ── Code ──────────────────────────────────────────────────── */
+    code {
+      font-family: var(--font-mono); font-size: .84em;
+      background: var(--bg-code); color: #c7254e;
+      padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border);
+    }
+    pre {
+      background: #1e1e2e; border-radius: var(--radius);
+      padding: 18px 20px; overflow-x: auto; margin: 14px 0 20px;
+      border: 1px solid #2d2d44;
+    }
+    pre code {
+      font-family: var(--font-mono); font-size: 13px;
+      background: none; color: #cdd6f4; padding: 0; border: none;
+    }
+    .kw  { color: #cba6f7; }
+    .str { color: #a6e3a1; }
+    .num { color: #fab387; }
+    .cmt { color: #6c7086; font-style: italic; }
+    .fn  { color: #89b4fa; }
+    .tag { color: #f38ba8; }
+    .atr { color: #fab387; }
+    .val { color: #a6e3a1; }
+    .prop{ color: #89dceb; }
+    .sel { color: #cba6f7; }
+
+    /* ── Tables ────────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 13.5px; }
+    th { background: var(--bg-alt); padding: 9px 14px; text-align: left; font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); border: 1px solid var(--border); }
+    td { padding: 9px 14px; border: 1px solid var(--border); color: var(--text-dim); vertical-align: top; }
+    tr:nth-child(even) td { background: var(--bg-alt); }
+
+    /* ── Callouts ──────────────────────────────────────────────── */
+    .callout { display: flex; gap: 12px; padding: 14px 16px; border-radius: var(--radius); margin: 16px 0; font-size: 13.5px; border-left: 3px solid; }
+    .callout-icon { font-size: 16px; flex-shrink: 0; line-height: 1.5; }
+    .callout p { margin: 0; }
+    .callout.info    { background: var(--accent-bg); border-color: var(--accent); }
+    .callout.info    p { color: #3730a3; }
+    .callout.success { background: var(--green-bg);  border-color: var(--green); }
+    .callout.success p { color: #166534; }
+    .callout.warning { background: var(--amber-bg);  border-color: var(--amber); }
+    .callout.warning p { color: #92400e; }
+
+    /* ── File path labels ──────────────────────────────────────── */
+    .file-path {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-mono); font-size: 12px;
+      background: var(--bg-alt); border: 1px solid var(--border);
+      padding: 3px 8px; border-radius: 5px; color: var(--text-dim); margin: 2px 0;
+    }
+    .file-path::before { content: "📄"; font-size: 11px; }
+
+    /* ── Step flow ─────────────────────────────────────────────── */
+    .step-flow { display: flex; flex-direction: column; gap: 0; margin: 20px 0; }
+    .step { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px; flex-shrink: 0; margin-top: 2px;
+    }
+    .step-body h3 { margin-top: 0; margin-bottom: 6px; font-size: 14px; }
+    .step-body p  { margin: 0; font-size: 13.5px; }
+
+    /* ── Direction visual ──────────────────────────────────────── */
+    .dir-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .dir-card {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; background: var(--bg-alt);
+    }
+    .dir-card .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 99px;
+      font-size: 11px; font-weight: 700; margin-bottom: 10px;
+    }
+    .badge-dark  { background: #1e1e2e; color: #cdd6f4; }
+    .badge-light { background: #e8e8f0; color: #4f46e5; }
+    .circle-demo {
+      width: 60px; height: 60px; border-radius: 50%; margin: 12px 0;
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+    }
+    .circle-expand { background: radial-gradient(circle, #171717 40%, transparent 70%); border: 2px dashed #4f46e5; }
+    .circle-shrink { background: radial-gradient(circle, transparent 40%, #171717 70%); border: 2px dashed #f59e0b; }
+
+    /* ── Speed table highlight ─────────────────────────────────── */
+    .active-row td { background: var(--accent-bg) !important; color: var(--accent) !important; font-weight: 600; }
+
+    @media (max-width: 900px) {
+      .toc-sidebar { display: none; }
+      .content { padding: 28px 20px; }
+      .dir-cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- ── TOC ──────────────────────────────────────────────────────────── -->
+  <nav class="toc-sidebar" aria-label="Table of contents">
+    <div class="toc-header">Contents</div>
+    <ul class="toc-list">
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#effect">What the Effect Looks Like</a></li>
+      <li class="sub"><a href="#to-dark">Light → Dark</a></li>
+      <li class="sub"><a href="#to-light">Dark → Light</a></li>
+      <li><a href="#files">Files Involved</a></li>
+      <li><a href="#flow">Step-by-Step Flow</a></li>
+      <li><a href="#css">CSS — Keyframes &amp; Rules</a></li>
+      <li class="sub"><a href="#expand">@theme-circle-expand</a></li>
+      <li class="sub"><a href="#shrink">@theme-circle-shrink</a></li>
+      <li class="sub"><a href="#vt-new">::view-transition-new</a></li>
+      <li class="sub"><a href="#vt-old">::view-transition-old</a></li>
+      <li><a href="#hook">useDarkMode Hook</a></li>
+      <li class="sub"><a href="#flushsync">Why flushSync?</a></li>
+      <li class="sub"><a href="#datadir">data-theme-dir attribute</a></li>
+      <li><a href="#toggle">Toggle Button — UserProfile</a></li>
+      <li><a href="#speed">Changing Animation Speed</a></li>
+      <li><a href="#browser">Browser Support</a></li>
+      <li><a href="#fallback">Fallback (Firefox)</a></li>
+    </ul>
+  </nav>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────── -->
+  <main class="content">
+
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">My Learning Admin · Feature Documentation</p>
+    <h1>Dark / Light Theme Transition</h1>
+    <p style="font-size:16px;margin-top:10px;margin-bottom:32px;">
+      A Telegram-style circular reveal effect for switching between dark and light themes —
+      a circle expands from the toggle button when going dark, and shrinks back to it when going light.
+    </p>
+
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <p>This feature uses the browser's <strong>View Transitions API</strong> (Chrome / Edge 111+)
+         with a CSS <code>clip-path: circle()</code> animation. Firefox falls back to a smooth
+         CSS crossfade transition automatically.</p>
+    </div>
+
+    <!-- ── Overview ──────────────────────────────────────────────────── -->
+    <h2 id="overview">Overview</h2>
+    <p>
+      When the user clicks the sun/moon pill toggle in the sidebar profile dropdown,
+      the entire application theme switches with a circular wipe animation:
+    </p>
+    <ul>
+      <li><strong>Light → Dark:</strong> a dark circle starts tiny at the click point and <strong>expands</strong> to fill the entire screen.</li>
+      <li><strong>Dark → Light:</strong> the dark screen <strong>shrinks</strong> into a circle back to the click point, revealing the light theme underneath.</li>
+    </ul>
+    <p>
+      The animation is <strong>750 ms</strong> by default with a smooth
+      <code>cubic-bezier(0.45, 0, 0.55, 1)</code> easing (ease-in-out). You can change the
+      speed — see the <a href="#speed">Changing Speed</a> section.
+    </p>
+
+    <!-- ── Effect ────────────────────────────────────────────────────── -->
+    <h2 id="effect">What the Effect Looks Like</h2>
+
+    <div class="dir-cards">
+      <div class="dir-card" id="to-dark">
+        <span class="badge badge-dark">Light → Dark</span>
+        <p>A <strong>tiny dark circle</strong> appears at the exact position of the toggle click and <strong>grows outward</strong> until it covers the entire viewport.</p>
+        <div class="circle-demo circle-expand">🌙</div>
+        <p style="font-size:12px;margin:0;">
+          CSS: <code>::view-transition-new(root)</code> animates with
+          <code>theme-circle-expand</code> keyframe.<br>
+          Old (light) snapshot stays frozen underneath at <code>z-index: 0</code>.
+        </p>
+      </div>
+      <div class="dir-card" id="to-light">
+        <span class="badge badge-light">Dark → Light</span>
+        <p>The <strong>dark screen shrinks</strong> into a circle that retreats to the toggle click point, revealing the light theme underneath.</p>
+        <div class="circle-demo circle-shrink">☀️</div>
+        <p style="font-size:12px;margin:0;">
+          CSS: <code>::view-transition-old(root)</code> animates with
+          <code>theme-circle-shrink</code> keyframe.<br>
+          New (light) snapshot stays frozen underneath at <code>z-index: 0</code>.
+        </p>
+      </div>
+    </div>
+
+    <!-- ── Files ─────────────────────────────────────────────────────── -->
+    <h2 id="files">Files Involved</h2>
+
+    <table>
+      <thead>
+        <tr><th>File</th><th>Role</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="file-path">src/index.css</span></td>
+          <td>Defines the <code>@keyframes</code> and <code>::view-transition-*</code> CSS rules. All animation timing lives here.</td>
+        </tr>
+        <tr>
+          <td><span class="file-path">src/organisms/SidebarV2/hooks/useDarkMode.ts</span></td>
+          <td>The React hook. Calls <code>document.startViewTransition()</code>, sets <code>--vt-x/y</code> CSS vars, sets <code>data-theme-dir</code> attribute, uses <code>flushSync</code> to force synchronous React render.</td>
+        </tr>
+        <tr>
+          <td><span class="file-path">src/organisms/SidebarV2/useMemo/components/UserProfile.tsx</span></td>
+          <td>The sun/moon pill toggle button. Captures <code>e.clientX, e.clientY</code> on click and passes them to <code>onToggleDarkMode(x, y)</code>.</td>
+        </tr>
+        <tr>
+          <td><span class="file-path">src/organisms/SidebarV2/types.ts</span></td>
+          <td>TypeScript interface. <code>onToggleDarkMode: (x: number, y: number) =&gt; void</code></td>
+        </tr>
+        <tr>
+          <td><span class="file-path">src/organisms/SidebarV2/Sidebar.tsx</span></td>
+          <td>Wires <code>toggleDarkMode</code> from the hook into <code>profileProps.onToggleDarkMode</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ── Flow ──────────────────────────────────────────────────────── -->
+    <h2 id="flow">Step-by-Step Flow</h2>
+    <p>This is exactly what happens when the user clicks the toggle:</p>
+
+    <div class="step-flow">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>User clicks the pill toggle button</h3>
+          <p>The button's <code>onClick</code> in <code>ThemeToggle</code> fires:<br>
+          <code>onClick={(e) =&gt; onToggle(e.clientX, e.clientY)}</code><br>
+          <strong>e.clientX / e.clientY</strong> = exact pixel position of the click on screen.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>useDarkMode receives the coordinates</h3>
+          <p><code>toggleDarkMode(x, y)</code> is called. Two CSS custom properties are set on <code>&lt;html&gt;</code>:<br>
+          <code>--vt-x: &lt;x&gt;px</code> and <code>--vt-y: &lt;y&gt;px</code><br>
+          These are the center point of the circle animation.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Direction attribute is set</h3>
+          <p>The hook sets <code>data-theme-dir="to-dark"</code> or <code>"to-light"</code> on <code>&lt;html&gt;</code>.<br>
+          This tells the CSS which animation to play — expand or shrink.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Browser takes a BEFORE snapshot</h3>
+          <p><code>document.startViewTransition(callback)</code> is called.<br>
+          The browser instantly screenshots the current page (old theme).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>flushSync forces React to render the new theme NOW</h3>
+          <p>Inside the callback, <code>flushSync()</code> is called with <code>setIsDarkMode(next)</code>.<br>
+          This makes React render synchronously — the <code>.dark</code> class is added/removed on <code>&lt;html&gt;</code> immediately.<br>
+          <strong>Without flushSync</strong>: React batches the update and the browser sees identical before/after → no animation.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <h3>Browser takes an AFTER snapshot</h3>
+          <p>Now the browser has two snapshots: old theme and new theme.<br>
+          It stacks them and begins playing the CSS animations defined by <code>::view-transition-new(root)</code> and <code>::view-transition-old(root)</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">7</div>
+        <div class="step-body">
+          <h3>clip-path circle animation plays</h3>
+          <p>The circular wipe plays for <strong>750 ms</strong>. When it finishes, the browser removes the transition pseudo-elements and the real new-theme page is visible.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CSS ───────────────────────────────────────────────────────── -->
+    <h2 id="css">CSS — Keyframes &amp; Transition Rules</h2>
+    <p>File: <span class="file-path">src/index.css</span> — search for <code>"Telegram-style circular theme reveal"</code></p>
+
+    <h3 id="expand">1. @keyframes theme-circle-expand</h3>
+    <p>Used when going <strong>Light → Dark</strong>. The new (dark) page starts as a zero-radius circle and grows to cover the entire viewport.</p>
+    <pre><code><span class="cmt">/* Circle grows from click point (--vt-x, --vt-y) to fill the screen */</span>
+<span class="kw">@keyframes</span> <span class="fn">theme-circle-expand</span> {
+  <span class="kw">from</span> { <span class="prop">clip-path</span>: circle(<span class="num">0px</span>     at <span class="kw">var</span>(--vt-x) <span class="kw">var</span>(--vt-y)); }
+  <span class="kw">to</span>   { <span class="prop">clip-path</span>: circle(<span class="num">200vmax</span> at <span class="kw">var</span>(--vt-x) <span class="kw">var</span>(--vt-y)); }
+}</code></pre>
+    <ul>
+      <li><code>0px</code> → invisible circle (nothing visible)</li>
+      <li><code>200vmax</code> → large enough to cover any screen (diagonal of 100vw×100vh is ~141vmax, 200vmax is safe)</li>
+      <li><code>var(--vt-x) var(--vt-y)</code> → center of circle = toggle button click position</li>
+    </ul>
+
+    <h3 id="shrink">2. @keyframes theme-circle-shrink</h3>
+    <p>Used when going <strong>Dark → Light</strong>. The old (dark) page starts as full-screen and shrinks to zero at the click point, revealing the light page underneath.</p>
+    <pre><code><span class="cmt">/* Circle shrinks from full screen back to click point */</span>
+<span class="kw">@keyframes</span> <span class="fn">theme-circle-shrink</span> {
+  <span class="kw">from</span> { <span class="prop">clip-path</span>: circle(<span class="num">200vmax</span> at <span class="kw">var</span>(--vt-x) <span class="kw">var</span>(--vt-y)); }
+  <span class="kw">to</span>   { <span class="prop">clip-path</span>: circle(<span class="num">0px</span>     at <span class="kw">var</span>(--vt-x) <span class="kw">var</span>(--vt-y)); }
+}</code></pre>
+
+    <h3 id="vt-new">3. ::view-transition-new(root) — Light → Dark</h3>
+    <p>This pseudo-element represents the <strong>new (after) state</strong> of the page snapshot. For going dark, we expand it as a circle.</p>
+    <pre><code><span class="cmt">/* data-theme-dir="to-dark" is set by useDarkMode.ts before transition */</span>
+<span class="sel">html[data-theme-dir="to-dark"]</span>::view-transition-new(root) {
+  <span class="prop">animation</span>: theme-circle-expand <span class="num">750ms</span> cubic-bezier(<span class="num">0.45</span>, <span class="num">0</span>, <span class="num">0.55</span>, <span class="num">1</span>) forwards;
+  <span class="prop">z-index</span>: <span class="num">10</span>;           <span class="cmt">/* sits on top of the old snapshot */</span>
+  <span class="prop">mix-blend-mode</span>: normal; <span class="cmt">/* no colour blending with old snapshot */</span>
+}
+<span class="sel">html[data-theme-dir="to-dark"]</span>::view-transition-old(root) {
+  <span class="prop">animation</span>: none;        <span class="cmt">/* old (light) page stays completely still */</span>
+  <span class="prop">z-index</span>: <span class="num">0</span>;
+}</code></pre>
+
+    <h3 id="vt-old">4. ::view-transition-old(root) — Dark → Light</h3>
+    <p>For going light, we animate the <strong>old (before) state</strong> — the dark page — to shrink away.</p>
+    <pre><code><span class="cmt">/* data-theme-dir="to-light" is set by useDarkMode.ts before transition */</span>
+<span class="sel">html[data-theme-dir="to-light"]</span>::view-transition-old(root) {
+  <span class="prop">animation</span>: theme-circle-shrink <span class="num">750ms</span> cubic-bezier(<span class="num">0.45</span>, <span class="num">0</span>, <span class="num">0.55</span>, <span class="num">1</span>) forwards;
+  <span class="prop">z-index</span>: <span class="num">10</span>;           <span class="cmt">/* dark overlay sits on top, shrinking away */</span>
+  <span class="prop">mix-blend-mode</span>: normal;
+}
+<span class="sel">html[data-theme-dir="to-light"]</span>::view-transition-new(root) {
+  <span class="prop">animation</span>: none;        <span class="cmt">/* new (light) page already visible underneath */</span>
+  <span class="prop">z-index</span>: <span class="num">0</span>;
+}
+
+<span class="cmt">/* Disable browser's default cross-fade — only our circle animation runs */</span>
+::view-transition-group(root) {
+  <span class="prop">animation-duration</span>: <span class="num">0s</span>;
+}</code></pre>
+
+    <!-- ── Hook ──────────────────────────────────────────────────────── -->
+    <h2 id="hook">useDarkMode Hook</h2>
+    <p>File: <span class="file-path">src/organisms/SidebarV2/hooks/useDarkMode.ts</span></p>
+
+    <pre><code><span class="kw">import</span> { useState, useCallback, useEffect } <span class="kw">from</span> <span class="str">"react"</span>;
+<span class="kw">import</span> { flushSync } <span class="kw">from</span> <span class="str">"react-dom"</span>;  <span class="cmt">// ← forces sync render inside transition</span>
+
+<span class="kw">const</span> <span class="fn">toggleDarkMode</span> = <span class="fn">useCallback</span>((<span class="atr">x</span>: number, <span class="atr">y</span>: number) =&gt; {
+
+  <span class="cmt">// Function that React renders synchronously inside the transition callback</span>
+  <span class="kw">const</span> <span class="fn">applyToggle</span> = () =&gt; {
+    <span class="fn">flushSync</span>(() =&gt; {
+      <span class="fn">setIsDarkMode</span>(prev =&gt; {
+        <span class="kw">const</span> next = !prev;
+        document.documentElement.classList.<span class="fn">toggle</span>(<span class="str">"dark"</span>, next);
+        localStorage.<span class="fn">setItem</span>(STORAGE_KEYS.DARK_MODE, String(next));
+        <span class="kw">return</span> next;
+      });
+    });
+  };
+
+  <span class="cmt">// ── View Transitions API path (Chrome / Edge 111+) ──────────────────</span>
+  <span class="kw">if</span> (<span class="str">"startViewTransition"</span> <span class="kw">in</span> document) {
+    document.documentElement.style.<span class="fn">setProperty</span>(<span class="str">"--vt-x"</span>, `${x}px`);
+    document.documentElement.style.<span class="fn">setProperty</span>(<span class="str">"--vt-y"</span>, `${y}px`);
+    document.documentElement.<span class="fn">setAttribute</span>(
+      <span class="str">"data-theme-dir"</span>,
+      !isDarkMode ? <span class="str">"to-dark"</span> : <span class="str">"to-light"</span>
+    );
+    (document <span class="kw">as any</span>).<span class="fn">startViewTransition</span>(applyToggle);
+    <span class="kw">return</span>;
+  }
+
+  <span class="cmt">// ── Fallback: CSS crossfade (Firefox) ───────────────────────────────</span>
+  document.documentElement.classList.<span class="fn">add</span>(<span class="str">"theme-switching"</span>);
+  <span class="fn">applyToggle</span>();
+  window.<span class="fn">setTimeout</span>(() =&gt; {
+    document.documentElement.classList.<span class="fn">remove</span>(<span class="str">"theme-switching"</span>);
+  }, <span class="num">420</span>);
+
+}, [isDarkMode]);</code></pre>
+
+    <h3 id="flushsync">Why flushSync?</h3>
+    <div class="callout warning">
+      <span class="callout-icon">⚠️</span>
+      <p>Without <code>flushSync</code>, React <strong>batches</strong> the state update and doesn't
+         render until after <code>startViewTransition</code>'s callback has returned.
+         The browser then captures two <strong>identical</strong> snapshots (both old theme),
+         and the animation plays between two same images — you see nothing.</p>
+    </div>
+    <p>
+      <code>flushSync</code> from <code>react-dom</code> forces React to commit the state update
+      and re-render the DOM synchronously inside the callback. The browser then captures
+      a real before/after diff and the circle animation is visible.
+    </p>
+
+    <h3 id="datadir">The data-theme-dir attribute</h3>
+    <p>
+      The CSS pseudo-elements <code>::view-transition-new(root)</code> and
+      <code>::view-transition-old(root)</code> can't detect "which direction" the
+      transition is going. We solve this with an HTML attribute:
+    </p>
+    <table>
+      <thead><tr><th>Attribute value</th><th>Direction</th><th>Which snapshot animates</th><th>Animation</th></tr></thead>
+      <tbody>
+        <tr><td><code>to-dark</code></td><td>Light → Dark</td><td><code>::view-transition-new</code> (dark page)</td><td>circle expands</td></tr>
+        <tr><td><code>to-light</code></td><td>Dark → Light</td><td><code>::view-transition-old</code> (dark page)</td><td>circle shrinks</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ── Toggle button ─────────────────────────────────────────────── -->
+    <h2 id="toggle">Toggle Button — UserProfile</h2>
+    <p>File: <span class="file-path">src/organisms/SidebarV2/useMemo/components/UserProfile.tsx</span></p>
+    <p>
+      The pill-shaped sun/moon toggle button passes the click coordinates to the hook:
+    </p>
+    <pre><code><span class="cmt">// The onClick captures the mouse position and passes it up the chain</span>
+&lt;<span class="tag">button</span>
+  <span class="atr">onClick</span>={(<span class="atr">e</span>) =&gt; <span class="fn">onToggle</span>(e.clientX, e.clientY)}
+  ...
+&gt;</code></pre>
+    <p>
+      The component chain for the coordinates is:<br>
+      <code>ThemeToggle.onToggle</code>
+      → <code>ProfileDropdown.onToggleDarkMode</code>
+      → <code>UserProfile.onToggleDarkMode</code>
+      → <code>Sidebar.profileProps.onToggleDarkMode</code>
+      → <code>useDarkMode.toggleDarkMode(x, y)</code>
+    </p>
+
+    <!-- ── Speed ─────────────────────────────────────────────────────── -->
+    <h2 id="speed">Changing Animation Speed</h2>
+    <p>
+      Open <span class="file-path">src/index.css</span> and find the two rules below.
+      Change both durations to the same value to keep the expand and shrink in sync.
+    </p>
+
+    <pre><code><span class="cmt">/* Rule 1 — Light → Dark (expand) */</span>
+<span class="sel">html[data-theme-dir="to-dark"]</span>::view-transition-new(root) {
+  <span class="prop">animation</span>: theme-circle-expand <span class="num">750ms</span> cubic-bezier(...) forwards;
+  <span class="cmt">/*                               ↑ CHANGE THIS */</span>
+}
+
+<span class="cmt">/* Rule 2 — Dark → Light (shrink) */</span>
+<span class="sel">html[data-theme-dir="to-light"]</span>::view-transition-old(root) {
+  <span class="prop">animation</span>: theme-circle-shrink <span class="num">750ms</span> cubic-bezier(...) forwards;
+  <span class="cmt">/*                                ↑ CHANGE THIS (keep same as Rule 1) */</span>
+}</code></pre>
+
+    <table>
+      <thead><tr><th>Duration</th><th>Feel</th></tr></thead>
+      <tbody>
+        <tr><td><code>400ms</code></td><td>Snappy / instant feel</td></tr>
+        <tr><td><code>500ms</code></td><td>Fast</td></tr>
+        <tr class="active-row"><td><code>750ms</code></td><td>✓ Default — smooth and comfortable</td></tr>
+        <tr><td><code>1000ms</code></td><td>Slow / cinematic</td></tr>
+        <tr><td><code>1500ms</code></td><td>Very slow / dramatic</td></tr>
+        <tr><td><code>2000ms</code></td><td>Extra slow (for demos)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Changing the easing (feel of the curve)</h3>
+    <table>
+      <thead><tr><th>cubic-bezier value</th><th>Feel</th></tr></thead>
+      <tbody>
+        <tr class="active-row"><td><code>cubic-bezier(0.45, 0, 0.55, 1)</code></td><td>✓ Default — true ease-in-out, symmetrical</td></tr>
+        <tr><td><code>ease-in-out</code></td><td>Browser default ease-in-out (slightly different curve)</td></tr>
+        <tr><td><code>cubic-bezier(0.22, 1, 0.36, 1)</code></td><td>Spring — starts fast, eases out gently</td></tr>
+        <tr><td><code>linear</code></td><td>Constant speed (mechanical feel)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ── Browser support ───────────────────────────────────────────── -->
+    <h2 id="browser">Browser Support</h2>
+    <table>
+      <thead><tr><th>Browser</th><th>View Transitions API</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Chrome 111+</td><td>✅ Supported</td><td>Full circular wipe animation</td></tr>
+        <tr><td>Edge 111+</td><td>✅ Supported</td><td>Full circular wipe animation</td></tr>
+        <tr><td>Safari 18+</td><td>✅ Supported</td><td>Full circular wipe animation</td></tr>
+        <tr><td>Firefox (all)</td><td>❌ Not supported</td><td>Smooth CSS crossfade fallback (see below)</td></tr>
+        <tr><td>Chrome &lt; 111</td><td>❌ Not supported</td><td>Smooth CSS crossfade fallback</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ── Fallback ───────────────────────────────────────────────────── -->
+    <h2 id="fallback">Fallback — Firefox &amp; Older Browsers</h2>
+    <p>
+      When <code>"startViewTransition" in document</code> is <code>false</code>, the hook
+      adds <code>class="theme-switching"</code> to <code>&lt;html&gt;</code> for 420 ms
+      while the theme changes. The CSS fallback rule applies smooth transitions to every element:
+    </p>
+    <pre><code><span class="cmt">/* src/index.css — search for "Smooth CSS fallback" */</span>
+<span class="sel">html.theme-switching</span>,
+<span class="sel">html.theme-switching *</span> {
+  <span class="prop">transition</span>:
+    background-color <span class="num">380ms</span> cubic-bezier(<span class="num">0.4</span>, <span class="num">0</span>, <span class="num">0.2</span>, <span class="num">1</span>),
+    border-color     <span class="num">380ms</span> cubic-bezier(<span class="num">0.4</span>, <span class="num">0</span>, <span class="num">0.2</span>, <span class="num">1</span>),
+    color            <span class="num">280ms</span> cubic-bezier(<span class="num">0.4</span>, <span class="num">0</span>, <span class="num">0.2</span>, <span class="num">1</span>) <span class="str">!important</span>;
+}</code></pre>
+    <p>This gives a smooth crossfade in Firefox where every colour changes gradually instead of jumping.</p>
+
+    <hr>
+    <p style="font-size:12px;color:var(--text-muted);">
+      My Learning Admin · Theme Transition Documentation · Last updated May 2026
+    </p>
+
+  </main>
+</div>
+</body>
+</html>
