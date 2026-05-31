@@ -89,6 +89,23 @@ const BOOKING_STATUS_OPTIONS: SelectOption[] = [
   { value: "cancelled_by_admin_crm",label: "Cancelled (Admin)" },
 ];
 
+const PACKAGE_OPTIONS: SelectOption[] = [
+  { value: "Room Cleaning",                                         label: "Room Cleaning"                                         },
+  { value: "Washroom Cleaning",                                     label: "Washroom Cleaning"                                     },
+  { value: "Kitchen Cleaning",                                      label: "Kitchen Cleaning"                                      },
+  { value: "Room + Washroom Cleaning",                              label: "Room + Washroom Cleaning"                              },
+  { value: "1 BHK Full Home Cleaning",                              label: "1 BHK Full Home Cleaning"                              },
+  { value: "2 BHK Full Home Cleaning",                              label: "2 BHK Full Home Cleaning"                              },
+  { value: "Full Room ( Room + Washroom + Kitchen ) Cleaning",      label: "Full Room ( Room + Washroom + Kitchen ) Cleaning"      },
+  { value: "Deep Full Room ( Room + Washroom + Balcony )Cleaning",  label: "Deep Full Room ( Room + Washroom + Balcony )Cleaning"  },
+  { value: "Washroom + Kitchen Cleaning",                           label: "Washroom + Kitchen Cleaning"                           },
+  { value: "Kitchen + Utensil (Large Combo)",                       label: "Kitchen + Utensil (Large Combo)"                       },
+  { value: "Kitchen + Utensil Cleaning(Small Combo)",               label: "Kitchen + Utensil Cleaning(Small Combo)"               },
+  { value: "Utensil Cleaning(Small Combo)",                         label: "Utensil Cleaning(Small Combo)"                         },
+  { value: "Utensil Cleaning(Large Combo)",                         label: "Utensil Cleaning(Large Combo)"                         },
+  { value: "Refrigerator Cleaning",                                 label: "Refrigerator Cleaning"                                 },
+];
+
 const PAYMENT_METHOD_OPTIONS: SelectOption[] = [
   { value: "online", label: "Online" },
   { value: "cash",   label: "Cash"   },
@@ -427,8 +444,9 @@ const BookingEntryCard: React.FC<{
               error={entry.errors.booking_via}
               onChange={e => setField("booking_via", e.target.value as BookingVia)} />
             <div className="form-grid-full">
-              <CleanInput label="Package Name" type="text"
-                value={entry.fields.package_name} placeholder="e.g. full room service like actual package…"
+              <CleanSelect label="Package Name"
+                value={entry.fields.package_name} options={PACKAGE_OPTIONS}
+                placeholder="Select package…"
                 onChange={e => setField("package_name", e.target.value)} />
             </div>
             <CleanSelect label="Payment Method"
@@ -715,9 +733,10 @@ const ViewEditContent: React.FC<{
           onChange={e => setField("booking_status", e.target.value as BookingStatus)} />
 
         <div className="form-grid-full">
-          <CleanInput label="Package Name" type="text"
-            value={fields.package_name} placeholder="full room service like actual package…"
-            readOnly={isView} disabled={isView}
+          <CleanSelect label="Package Name"
+            value={fields.package_name} options={PACKAGE_OPTIONS}
+            placeholder="Select package…"
+            disabled={isView}
             onChange={e => setField("package_name", e.target.value)} />
         </div>
 
