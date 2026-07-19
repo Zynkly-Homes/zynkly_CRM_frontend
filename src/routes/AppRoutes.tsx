@@ -20,6 +20,8 @@ const DashboardPage      = lazy(() => import("../pages/dashboard-admin/Dashboard
 const SettingConfig      = lazy(() => import("../pages/setting-config"));
 const ApiKeyPage         = lazy(() => import("../pages/setting-config/ApiKeyPage"));
 const BookingPage        = lazy(() => import("../pages/booking-management"));
+const HouseHelperPage    = lazy(() => import("../pages/house-helper"));
+const BookingActivityLogsPage = lazy(() => import("../pages/booking-activity-logs"));
 const AdminDashboard     = lazy(() => import("../pages/dashboard/admin-dashboard/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
 const ManagerDashboard   = lazy(() => import("../pages/dashboard/manager-dashboard/ManagerDashboard").then(m => ({ default: m.ManagerDashboard })));
 const Course             = lazy(() => import("../pages/Course"));
@@ -331,6 +333,28 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute moduleId="booking_management">
               <InLayout><BookingPage /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ── OPERATIONS (module-id gated) ───────────────────────────────────
+            OPEN WHEN: accessSlice["house_helper"].view === true               */}
+        <Route
+          path="/house-helper"
+          element={
+            <ProtectedRoute moduleId="house_helper">
+              <InLayout><HouseHelperPage /></InLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ── OPERATIONS (module-id gated) ───────────────────────────────────
+            OPEN WHEN: accessSlice["activity_log"].view === true               */}
+        <Route
+          path="/booking-activity-logs"
+          element={
+            <ProtectedRoute moduleId="activity_log">
+              <InLayout><BookingActivityLogsPage /></InLayout>
             </ProtectedRoute>
           }
         />

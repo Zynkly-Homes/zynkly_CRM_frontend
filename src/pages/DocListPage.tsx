@@ -81,7 +81,7 @@ const DocListPage: React.FC = () => {
             fontWeight: 700,
             letterSpacing: ".06em",
             textTransform: "uppercase",
-          }}>My Learning Admin</span>
+          }}>Zynkly Admin</span>
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 800, color: "#e2e4ed", margin: "10px 0 6px" }}>
           Developer Documentation

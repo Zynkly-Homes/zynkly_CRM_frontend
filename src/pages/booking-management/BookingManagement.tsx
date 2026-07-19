@@ -1,13 +1,11 @@
-import React, { useCallback, useRef, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import { selectAccessToken } from "../../store/slices/authSlice";
 import {
-  CalendarRange,
   ListFilter,
   Upload,
   Plus,
-  X,
-  ChevronDown,
 } from "lucide-react";
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
@@ -15,14 +13,21 @@ import { getData, deleteData } from "../../services/crmServices";
 import { emitNavDone } from "../../atoms/NavigationProgress";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
+import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 import type { RootState } from "../../store";
-import CreateBookingModal, { type InitialBookingData } from "./CreateBookingModal";
+import CreateBookingModal, {
+  PACKAGE_FETCH_PAGE, PAYMENT_METHOD_FETCH_PAGE, PAYMENT_STATUS_FETCH_PAGE,
+  makeHouseHelperFetchPage,
+} from "./CreateBookingModal";
+import BookingDetailPage from "./BookingDetailPage";
+import BookingEditPage from "./BookingEditPage";
 import {
   CleanButton,
   CleanSearchBar,
-  CleanInput,
-  CleanSelect,
+  CleanFilterPanel,
+  CleanFilterChips,
   type SelectOption,
+  type FilterFieldConfig,
 } from "../../atoms/my_clean_code_atoms";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -34,21 +39,38 @@ type BookingStatus =
   | "cancelled_by_admin_crm";
 type BookingVia = "app" | "website" | "laptop" | "whatsapp_to_crm" | "call";
 
+interface CancellationLogEntry {
+  booking_status?: string;
+  cancelled_by?:   string;
+  cancelled_at?:   string;
+}
+
 interface BookingApiItem {
   _id: string;
   reference_id: string;
   branch?: string;
   user_name?: string;
+  user_id?: string;
   user_phone?: string;
   address?: string;
+  live_location_url?: string;
   booking_via: BookingVia;
+  booking_created_date_and_time?: string;
   booking_status: BookingStatus;
   package_name?: string;
+  cleaner_id?: string;
+  cleaner_name?: string;
+  cleaner_mobile_number?: string;
+  house_helper_name?: string;
+  cancellation_log?: CancellationLogEntry[];
+  cancellation_reason?: string;
   payment_method?: string;
   payment_amount?: number;
   payment_status?: string;
   is_active: boolean;
+  is_delete?: boolean;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 interface BookingsApiResponse {
@@ -104,6 +126,13 @@ const VIA_OPTIONS: SelectOption[] = [
   { value: "laptop",          label: "Laptop" },
   { value: "whatsapp_to_crm", label: "WhatsApp" },
   { value: "call",            label: "Call" },
+];
+
+const SORT_OPTIONS: SelectOption[] = [
+  { value: "latest_updated",  label: "Latest Updated"  },
+  { value: "oldest_updated",  label: "Oldest Updated"  },
+  { value: "latest_created",  label: "Latest Created"  },
+  { value: "oldest_created",  label: "Oldest Created"  },
 ];
 
 const PAYMENT_STATUS_STYLE: Record<string, React.CSSProperties> = {
@@ -207,6 +236,27 @@ const COLUMNS: GridColumn<BookingApiItem>[] = [
     ),
   },
   {
+    field: "cleaner_name",
+    headerName: "House Helper",
+    minWidth: 170,
+    renderCell: ({ row }) => {
+      const name = row.cleaner_name || row.house_helper_name;
+      if (!name || name === "N/A") return <span style={{ fontSize: 12, color: "var(--dt-muted)" }}>—</span>;
+      return (
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "var(--dt-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {name}
+          </p>
+          {row.cleaner_mobile_number && (
+            <p style={{ margin: 0, fontSize: 11, color: "var(--dt-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {row.cleaner_mobile_number}
+            </p>
+          )}
+        </div>
+      );
+    },
+  },
+  {
     field: "payment_method",
     headerName: "Pay Method",
     minWidth: 120,
@@ -251,32 +301,32 @@ const COLUMNS: GridColumn<BookingApiItem>[] = [
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface Filters {
-  search: string;
+  sort_by:        string;
   booking_status: string;
-  booking_via: string;
-  branch: string;
-  date_from: string;
-  date_to: string;
+  booking_via:    string;
+  branch:         string;
+  payment_status: string;
+  payment_method: string;
+  cleaner_id:     string;
+  package_name:   string;
+  date_from:      string;
+  date_to:        string;
+  updated_from:   string;
+  updated_to:     string;
+  is_active:      string;
+  is_delete:      string;
 }
 
 const EMPTY: Filters = {
-  search: "", booking_status: "", booking_via: "",
-  branch: "", date_from: "", date_to: "",
+  sort_by: "",
+  booking_status: "", booking_via: "", branch: "",
+  payment_status: "", payment_method: "", cleaner_id: "",
+  package_name: "",
+  date_from: "", date_to: "", updated_from: "", updated_to: "",
+  is_active: "", is_delete: "",
 };
 
-// ── Panel overlay style (shared) ───────────────────────────────────────────────
-
-const panelStyle: React.CSSProperties = {
-  position:     "absolute",
-  top:          "calc(100% + 4px)",
-  left:         0,
-  zIndex:       50,
-  background:   "var(--fi-bg-panel)",
-  border:       "1px solid var(--fi-border)",
-  borderRadius: "var(--fi-radius)",
-  boxShadow:    "0 4px 20px rgba(0,0,0,0.10)",
-  padding:      12,
-};
+const FILTERS_STORAGE_KEY = "booking-management:filters";
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -286,69 +336,91 @@ const BookingManagement: React.FC = () => {
   const apiKey = useSelector((s: RootState) => selectApiKey(s));
   const access = useSelector((s: RootState) => selectAccessData(s));
   const perms = (access?.["booking_management"] ?? {}) as Record<string, boolean>;
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [data, setData] = React.useState<BookingApiItem[]>([]);
-  const [filters, setFilters] = React.useState<Filters>(EMPTY);
+  // Persisted so a page refresh doesn't wipe out applied filters.
+  const [filters, setFilters] = useLocalStorageState<Filters>(FILTERS_STORAGE_KEY, EMPTY);
+  const [search,          setSearch]          = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(false);
   const [showModal,      setShowModal]      = React.useState(false);
-  const [modalMode,      setModalMode]      = React.useState<"create" | "view" | "edit">("create");
-  const [selectedBooking,setSelectedBooking]= React.useState<InitialBookingData | null>(null);
+  const [viewedBooking,  setViewedBooking]  = React.useState<BookingApiItem | null>(null);
+  const [viewLoading,    setViewLoading]    = React.useState(false);
 
-  const [showDatePanel, setShowDatePanel] = React.useState(false);
   const [showFilterPanel, setShowFilterPanel] = React.useState(false);
-  const datePanelRef = useRef<HTMLDivElement>(null);
+  const [cleanerLabel, setCleanerLabel] = React.useState<string | undefined>(undefined);
   const filterPanelRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLSpanElement>(null);
 
   const pageRef      = useRef(1);
   const fetchAbortRef = useRef<AbortController | null>(null);
-  const PER_PAGE = 25;
+  const PER_PAGE = 200;
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (datePanelRef.current && !datePanelRef.current.contains(e.target as Node))
-        setShowDatePanel(false);
-      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node))
-        setShowFilterPanel(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  // Search only runs on Enter (or clearing the box) — not live/debounced —
+  // per request: typing shouldn't fire an API call on every keystroke.
+  const handleSearchEnter = useCallback((value: string) => setDebouncedSearch(value.trim()), []);
 
-  useEffect(() => {
-    // 500ms — fires only after the user pauses, not on each keystroke
-    const id = setTimeout(() => setDebouncedSearch(filters.search.trim()), 500);
-    return () => clearTimeout(id);
-  }, [filters.search]);
+  const setFilter = useCallback(
+    (key: string, val: string, option?: SelectOption | null) => {
+      setFilters((f) => ({ ...f, [key]: val }));
+      if (key === "cleaner_id") setCleanerLabel(option?.label);
+    },
+    [setFilters],
+  );
 
-  const setFilter = <K extends keyof Filters>(key: K, val: string) =>
-    setFilters((f) => ({ ...f, [key]: val }));
+  const clearAllFilters = useCallback(() => { setFilters(EMPTY); setCleanerLabel(undefined); }, [setFilters]);
 
-  const clearAllFilters = () => setFilters(EMPTY);
+  const removeFilters = useCallback((keys: string[]) => {
+    setFilters((f) => {
+      const next = { ...f };
+      keys.forEach((k) => { (next as Record<string, string>)[k] = ""; });
+      return next;
+    });
+    if (keys.includes("cleaner_id")) setCleanerLabel(undefined);
+  }, [setFilters]);
 
-  const activeFilterCount = [
-    filters.booking_status, filters.booking_via,
-    filters.branch, filters.date_from, filters.date_to,
-  ].filter(Boolean).length;
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
-  const hasDates = !!(filters.date_from || filters.date_to);
-  const dateLabel = hasDates
-    ? `${filters.date_from || "…"} – ${filters.date_to || "…"}`
-    : "Date range";
+  const cleanerFetchPage = useMemo(() => makeHouseHelperFetchPage(token), [token]);
+
+  const FILTER_FIELDS = useMemo<FilterFieldConfig[]>(() => [
+    { type: "select",       key: "sort_by",        label: "Sort By", options: SORT_OPTIONS, placeholder: "Default order" },
+    { type: "select",       key: "booking_status", label: "Status", options: STATUS_OPTIONS, placeholder: "All statuses" },
+    { type: "select",       key: "booking_via",    label: "Source", options: VIA_OPTIONS,    placeholder: "All sources"  },
+    { type: "text",         key: "branch",         label: "Branch",         placeholder: "Branch name…" },
+    { type: "async-select", key: "payment_status", label: "Payment Status", fetchPage: PAYMENT_STATUS_FETCH_PAGE },
+    { type: "async-select", key: "payment_method", label: "Payment Method", fetchPage: PAYMENT_METHOD_FETCH_PAGE },
+    { type: "async-select", key: "cleaner_id",     label: "House Helper", fetchPage: cleanerFetchPage, placeholder: "Select house helper…", searchPlaceholder: "Search by name, ID or mobile…" },
+    { type: "async-select", key: "package_name",   label: "Package",      fetchPage: PACKAGE_FETCH_PAGE, placeholder: "Select package…" },
+    { type: "date-range",   fromKey: "date_from",    toKey: "date_to",    label: "Created Date" },
+    { type: "date-range",   fromKey: "updated_from", toKey: "updated_to", label: "Updated Date" },
+    { type: "boolean",      key: "is_active", label: "Active Only",  trueLabel: "Active only", falseLabel: "Include inactive" },
+    { type: "boolean",      key: "is_delete", label: "Deleted",      trueLabel: "Show deleted", falseLabel: "Hide deleted" },
+  ], [cleanerFetchPage]);
 
   const buildParams = useCallback(
     (page: number) => ({
       page,
       limit: PER_PAGE,
       search:         debouncedSearch || undefined,
+      sort_by:        filters.sort_by || undefined,
       booking_status: filters.booking_status || undefined,
       booking_via:    filters.booking_via || undefined,
       branch:         filters.branch || undefined,
+      payment_status: filters.payment_status || undefined,
+      payment_method: filters.payment_method || undefined,
+      cleaner_id:     filters.cleaner_id || undefined,
+      package_name:   filters.package_name || undefined,
       date_from:      filters.date_from || undefined,
       date_to:        filters.date_to || undefined,
+      updated_from:   filters.updated_from || undefined,
+      updated_to:     filters.updated_to || undefined,
+      is_active:      filters.is_active || undefined,
+      is_delete:      filters.is_delete || undefined,
     }),
     [debouncedSearch, filters],
   );
@@ -406,22 +478,75 @@ const BookingManagement: React.FC = () => {
   const handleLoadMore = useCallback(() => fetchPage(pageRef.current + 1, true), [fetchPage]);
   const handleRefresh  = useCallback(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
-  // ── Modal open helpers ────────────────────────────────────────────────────
-  const openModal = useCallback((mode: "create" | "view" | "edit", row?: BookingApiItem) => {
-    setSelectedBooking(row ?? null);
-    setModalMode(mode);
-    setShowModal(true);
-  }, []);
+  // ── Create modal open/close (Create remains modal-based) ─────────────────
+  const openCreateModal  = useCallback(() => setShowModal(true), []);
+  const closeCreateModal = useCallback(() => setShowModal(false), []);
 
-  const closeModal = useCallback(() => {
-    setShowModal(false);
-    setSelectedBooking(null);
-    setModalMode("create");
-  }, []);
+  // ── Full-page view/edit navigation ────────────────────────────────────────
+  // View:  ?bookingId=<reference_id>
+  // Edit:  ?bookingId=<reference_id>&mode=edit
+  const openView = useCallback((row: BookingApiItem) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("bookingId", row.reference_id);
+    params.delete("mode");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
 
-  // ── Row action handlers ───────────────────────────────────────────────────
-  const handleView = useCallback((row: BookingApiItem) => openModal("view", row), [openModal]);
-  const handleEdit = useCallback((row: BookingApiItem) => openModal("edit", row), [openModal]);
+  const openEdit = useCallback((row: BookingApiItem) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("bookingId", row.reference_id);
+    params.set("mode", "edit");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
+
+  const closeView = useCallback(() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("bookingId");
+    params.delete("mode");
+    setSearchParams(params, { replace: true });
+    setViewedBooking(null);
+  }, [searchParams, setSearchParams]);
+
+  const backToView = useCallback(() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("mode");
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const handleEditFromView = useCallback(() => {
+    if (!viewedBooking) return;
+    openEdit(viewedBooking);
+  }, [viewedBooking, openEdit]);
+
+  const handleSaved = useCallback((updated: Record<string, unknown>) => {
+    setViewedBooking((prev) => (prev ? { ...prev, ...updated } as BookingApiItem : prev));
+    handleRefresh();
+    backToView();
+  }, [handleRefresh, backToView]);
+
+  // Restore the viewed booking from the URL (deep-link / refresh support).
+  useEffect(() => {
+    const bookingId = searchParams.get("bookingId");
+    if (!bookingId) { if (viewedBooking) setViewedBooking(null); return; }
+    if (viewedBooking && (viewedBooking.reference_id === bookingId || viewedBooking._id === bookingId)) return;
+
+    const local = data.find((d) => d.reference_id === bookingId || d._id === bookingId);
+    if (local) { setViewedBooking(local); return; }
+    if (!apiKey) return;
+
+    setViewLoading(true);
+    getData<BookingsApiResponse>({
+      endpoint: "bookings", token: token ?? undefined, instance: "identity",
+      params: { search: bookingId, limit: 5 },
+    })
+      .then((res) => {
+        const match = res.data.data.find((d) => d.reference_id === bookingId || d._id === bookingId);
+        if (match) setViewedBooking(match);
+        else showToastnew.error("Booking not found for the link");
+      })
+      .catch(() => showToastnew.error("Failed to load booking"))
+      .finally(() => setViewLoading(false));
+  }, [searchParams, data, apiKey, token, viewedBooking]);
 
   const handleDelete = useCallback(async (row: BookingApiItem) => {
     await deleteData({ endpoint: `bookings/${row._id}`, token: token, instance: "identity" });
@@ -436,6 +561,38 @@ const BookingManagement: React.FC = () => {
     showToastnew.success(`${ids.length} booking${ids.length > 1 ? "s" : ""} deleted`);
     handleRefresh();
   }, [token, handleRefresh]);
+
+  // ── Full-page booking view/edit ───────────────────────────────────────────
+  // ?bookingId=<reference_id>            → view page
+  // ?bookingId=<reference_id>&mode=edit  → edit page
+  const viewingBookingId = searchParams.get("bookingId");
+  const isEditMode       = searchParams.get("mode") === "edit";
+
+  if (viewingBookingId) {
+    if (!viewedBooking || viewLoading) {
+      return (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--fi-muted)", fontSize: 13 }}>
+          Loading booking…
+        </div>
+      );
+    }
+    if (isEditMode) {
+      return (
+        <BookingEditPage
+          data={viewedBooking}
+          onBack={backToView}
+          onSaved={handleSaved}
+        />
+      );
+    }
+    return (
+      <BookingDetailPage
+        data={viewedBooking}
+        onBack={closeView}
+        onEdit={perms.update !== false ? handleEditFromView : undefined}
+      />
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--dt-bg)" }}>
@@ -452,113 +609,44 @@ const BookingManagement: React.FC = () => {
         background:   "var(--fi-bg)",
       }}>
 
-        {/* Search */}
+        {/* Search — only fires on Enter, not live */}
         <CleanSearchBar
-          value={filters.search}
-          onChange={(v) => setFilter("search", v)}
-          placeholder="Search reference, name, phone…"
-          width={230}
+          value={search}
+          onChange={setSearch}
+          onEnter={handleSearchEnter}
+          placeholder="Search reference, name, phone… (press Enter)"
+          width={260}
+          accent
         />
-
-        {/* Date range */}
-        <div style={{ position: "relative" }} ref={datePanelRef}>
-          <CleanButton
-            variant="outline"
-            size="sm"
-            iconLeft={<CalendarRange style={{ width: 13, height: 13 }} />}
-            iconRight={hasDates
-              ? undefined
-              : <ChevronDown style={{ width: 11, height: 11 }} />}
-            onClick={() => setShowDatePanel((v) => !v)}
-            style={hasDates ? { borderColor: "var(--fi-border-focus)" } : undefined}
-          >
-            {hasDates ? (
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {dateLabel}
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFilter("date_from", "");
-                    setFilter("date_to", "");
-                  }}
-                  style={{ display: "flex", cursor: "pointer", color: "var(--fi-muted)" }}
-                >
-                  <X style={{ width: 11, height: 11 }} />
-                </span>
-              </span>
-            ) : dateLabel}
-          </CleanButton>
-
-          {showDatePanel && (
-            <div style={{ ...panelStyle, display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
-              <CleanInput
-                type="date"
-                value={filters.date_from}
-                onChange={(e) => setFilter("date_from", e.target.value)}
-                style={{ width: 148 }}
-              />
-              <span style={{ fontSize: 12, color: "var(--fi-muted)" }}>–</span>
-              <CleanInput
-                type="date"
-                value={filters.date_to}
-                onChange={(e) => setFilter("date_to", e.target.value)}
-                style={{ width: 148 }}
-              />
-              <CleanButton variant="primary" size="sm" onClick={() => setShowDatePanel(false)}>Done</CleanButton>
-            </div>
-          )}
-        </div>
 
         {/* Filter */}
         <div style={{ position: "relative" }} ref={filterPanelRef}>
-          <CleanButton
-            variant="outline"
-            size="sm"
-            iconLeft={<ListFilter style={{ width: 13, height: 13 }} />}
-            badge={activeFilterCount > 0 ? activeFilterCount : undefined}
-            onClick={() => setShowFilterPanel((v) => !v)}
-            style={activeFilterCount > 0 ? { borderColor: "var(--fi-border-focus)" } : undefined}
-          >
-            Filter
-          </CleanButton>
+          <span ref={filterButtonRef} style={{ display: "inline-flex" }}>
+            <CleanButton
+              variant="outline"
+              size="sm"
+              iconLeft={<ListFilter style={{ width: 13, height: 13 }} />}
+              badge={activeFilterCount > 0 ? activeFilterCount : undefined}
+              onClick={() => setShowFilterPanel((v) => !v)}
+              style={activeFilterCount > 0
+                ? { borderColor: "var(--badge-blue-text)", color: "var(--badge-blue-text)", boxShadow: "0 0 0 1px var(--badge-blue-text) inset" }
+                : { color: "var(--badge-blue-text)" }}
+            >
+              Filter
+            </CleanButton>
+          </span>
 
-          {showFilterPanel && (
-            <div style={{ ...panelStyle, minWidth: 240, display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--fi-muted)" }}>
-                Filters
-              </span>
-
-              <CleanSelect
-                label="Status"
-                value={filters.booking_status}
-                onChange={(e) => setFilter("booking_status", e.target.value)}
-                options={STATUS_OPTIONS}
-                placeholder="All statuses"
-              />
-
-              <CleanSelect
-                label="Source"
-                value={filters.booking_via}
-                onChange={(e) => setFilter("booking_via", e.target.value)}
-                options={VIA_OPTIONS}
-                placeholder="All sources"
-              />
-
-              <CleanInput
-                label="Branch"
-                type="text"
-                value={filters.branch}
-                onChange={(e) => setFilter("branch", e.target.value)}
-                placeholder="Branch name…"
-              />
-
-              {activeFilterCount > 0 && (
-                <CleanButton variant="danger" size="xs" onClick={clearAllFilters} style={{ width: "100%" }}>
-                  Clear all filters
-                </CleanButton>
-              )}
-            </div>
-          )}
+          <CleanFilterPanel
+            variant="drawer"
+            isOpen={showFilterPanel}
+            onClose={() => setShowFilterPanel(false)}
+            fields={FILTER_FIELDS}
+            values={filters}
+            onChange={setFilter}
+            onClear={clearAllFilters}
+            activeCount={activeFilterCount}
+            triggerRef={filterButtonRef}
+          />
         </div>
 
         {/* Export */}
@@ -579,12 +667,25 @@ const BookingManagement: React.FC = () => {
             variant="primary"
             size="sm"
             iconLeft={<Plus style={{ width: 13, height: 13 }} />}
-            onClick={() => openModal("create")}
+            onClick={openCreateModal}
           >
             Create Booking
           </CleanButton>
         )}
       </div>
+
+      {/* ── Active filter chips ────────────────────────────────────────────────── */}
+      {activeFilterCount > 0 && (
+        <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--fi-border)", background: "var(--fi-bg)" }}>
+          <CleanFilterChips
+            fields={FILTER_FIELDS}
+            values={filters}
+            onRemove={removeFilters}
+            onClearAll={clearAllFilters}
+            displayValues={cleanerLabel ? { cleaner_id: cleanerLabel } : undefined}
+          />
+        </div>
+      )}
 
       {/* ── Table ─────────────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0 }}>
@@ -607,8 +708,9 @@ const BookingManagement: React.FC = () => {
           onBulkDelete={perms.delete !== false ? handleBulkDelete : undefined}
           bulkDeleteLabel="Delete selected bookings — this cannot be undone"
           // ── Row actions ──────────────────────────────────────────────────
-          onView={handleView}
-          onEdit={perms.update !== false ? handleEdit : undefined}
+          onRowClick={openView}
+          onView={openView}
+          onEdit={perms.update !== false ? openEdit : undefined}
           onDelete={perms.delete !== false ? handleDelete : undefined}
           deleteConfirmTitle="Delete booking?"
           deleteConfirmDescription="This will permanently remove the booking record. This action cannot be undone."
@@ -618,11 +720,9 @@ const BookingManagement: React.FC = () => {
       {showModal && (
         <CreateBookingModal
           isOpen={showModal}
-          onClose={closeModal}
-          onCreated={() => { closeModal(); handleRefresh(); }}
-          onSaved={() => { closeModal(); handleRefresh(); }}
-          mode={modalMode}
-          initialData={selectedBooking ?? undefined}
+          onClose={closeCreateModal}
+          onCreated={() => { closeCreateModal(); handleRefresh(); }}
+          mode="create"
         />
       )}
     </div>

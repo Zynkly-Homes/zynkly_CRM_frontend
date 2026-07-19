@@ -1,7 +1,7 @@
 {
-  "name": "My Learning Admin",
+  "name": "Zynkly Admin",
   "short_name": "NP Admin",
-  "description": "My Learning Admin — manage bookings, users, and platform settings.",
+  "description": "Zynkly Admin — manage bookings, users, and platform settings.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

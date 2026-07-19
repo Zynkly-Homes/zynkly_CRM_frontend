@@ -6,6 +6,8 @@ import {
   Key,
   BookOpen,
   MessageSquare,
+  Sparkles,
+  History,
 } from "lucide-react";
 
 import { NavItemType } from "../types";
@@ -59,6 +61,12 @@ export const useNavigation = (
     const operations: NavItemType[] = [
       ...(hasAccess("booking_management")
         ? [{ name: "Booking Management", href: "/booking-management", icon: BookOpen }]
+        : []),
+      ...(hasAccess("house_helper")
+        ? [{ name: "House Helper", href: "/house-helper", icon: Sparkles }]
+        : []),
+      ...(hasAccess("activity_log")
+        ? [{ name: "Booking Activity Logs", href: "/booking-activity-logs", icon: History }]
         : []),
     ];
 

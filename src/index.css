@@ -285,6 +285,7 @@ textarea::-webkit-scrollbar-thumb:hover  { background: var(--dt-scrollbar-hover)
 
 /* ── Responsive 2-col form grid — auto-stacks to 1-col on mobile ────────── */
 .form-grid      { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid > *  { min-width: 0; } /* prevent grid-item blowout past its own column */
 .form-grid-full { grid-column: 1 / -1; }
 @media (max-width: 1023px) {
   .form-grid { grid-template-columns: 1fr; }

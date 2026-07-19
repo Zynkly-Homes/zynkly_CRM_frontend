@@ -4,6 +4,8 @@ export interface SelectOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** Optional extra payload carried alongside the option (e.g. for CleanAsyncSelect callers that need more than value/label). */
+  meta?: Record<string, unknown>;
 }
 
 export interface CleanSelectProps {

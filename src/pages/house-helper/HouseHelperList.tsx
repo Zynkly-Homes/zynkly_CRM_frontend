@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useMemo } from "react";
 import { selectAccessToken } from "../../store/slices/authSlice";
 import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import { ListFilter, Plus, AlertTriangle } from "lucide-react";
 import { CustomDatagrid, type GridColumn } from "../../atoms/CustomDatagrid";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
@@ -10,94 +11,50 @@ import { emitNavDone } from "../../atoms/NavigationProgress";
 import { selectApiKey, openApiKeyModal } from "../../store/slices/apiKeySlice";
 import { selectAccessData } from "../../store/slices/accessSlice";
 import type { RootState } from "../../store";
-import UserForm from "./UserForm";
-import UserProfileCard, { type CardUser } from "../../atoms/UserProfileCard";
+import HouseHelperForm from "./HouseHelperForm";
+import HouseHelperViewModal from "./HouseHelperViewModal";
 import {
   CleanButton, CleanSearchBar, CleanAsyncSelect, staticOptionsFetchPage, CleanModal, type SelectOption,
 } from "../../atoms/my_clean_code_atoms";
 
-const USER_FORM_ID = "user-mgmt-form";
+const HOUSE_HELPER_FORM_ID = "house-helper-form";
+const ENDPOINT = "cleaner-bookings";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface UserApiItem {
-  _id: string; username: string; email: string;
-  mobile_no: string; role_id: string; is_active: boolean;
-  profile_image_url?: string | null;
-  role?: { _id: string; role_name: string };
+interface PaymentApiEntry {
+  amount_paid?:    number;
+  date?:           string;
+  description?:    string;
+  status?:         string;
+  payment_method?: string;
 }
 
-interface UsersApiResponse {
+interface HouseHelperApiItem {
+  _id:            string;
+  reference_id:   string;
+  cleaner_name:   string;
+  cleaner_id?:    string;
+  mobile_number:  string;
+  address?:       string;
+  joined_at?:     string;
+  is_active:      boolean;
+  is_delete?:     boolean;
+  payments?:      PaymentApiEntry[];
+  createdAt?:     string;
+}
+
+interface HouseHelperApiResponse {
   success: boolean; message: string;
-  data: { data: UserApiItem[]; total: number; page: number; limit: number; totalPages: number };
+  data: { data: HouseHelperApiItem[]; total: number; page: number; limit: number; totalPages: number };
 }
-
-type UserItem = {
-  _id: string; name: string; email: string;
-  mobile_no?: string; role_name?: string; role_id?: string; is_active: boolean;
-  profile_image_url?: string | null;
-};
 
 type StatusState = { isOpen: boolean; id: string; name: string; is_active: boolean };
-
-// ── Pure helpers ───────────────────────────────────────────────────────────
-
-const mapUser = (u: UserApiItem): UserItem => ({
-  _id: u._id, name: u.username, email: u.email,
-  mobile_no: u.mobile_no, role_name: u.role?.role_name,
-  role_id: u.role_id, is_active: u.is_active,
-  profile_image_url: u.profile_image_url ?? null,
-});
 
 function extractErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   const e = err as { error?: { response?: { data?: { message?: string } } }; message?: string };
   return e?.error?.response?.data?.message ?? e?.message ?? "Operation failed";
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-// ── Avatar + Name cell ─────────────────────────────────────────────────────
-
-interface UserNameCellProps {
-  row: UserItem;
-  onAvatarClick: (e: React.MouseEvent<HTMLDivElement>, row: UserItem) => void;
-}
-
-function UserNameCell({ row, onAvatarClick }: UserNameCellProps) {
-  const [imgFailed, setImgFailed] = React.useState(false);
-  const url     = row.profile_image_url;
-  const showImg = !!url && !imgFailed;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div
-        onClick={(e) => { e.stopPropagation(); onAvatarClick(e, row); }}
-        title="View profile"
-        style={{
-          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-          overflow: "hidden", border: "1.5px solid var(--fi-border)",
-          background: showImg ? "transparent" : "var(--sc-surface)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer",
-          transition: "box-shadow 150ms ease",
-        }}
-        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 0 0 2px var(--btn-primary-bg)"; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
-      >
-        {showImg
-          ? <img src={url!} alt={row.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setImgFailed(true)} />
-          : <span style={{ fontSize: 9, fontWeight: 700, color: "var(--fi-muted)", lineHeight: 1 }}>{getInitials(row.name)}</span>
-        }
-      </div>
-      <span style={{ fontSize: 13, color: "var(--dt-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {row.name}
-      </span>
-    </div>
-  );
 }
 
 // ── Status badge ───────────────────────────────────────────────────────────
@@ -120,7 +77,14 @@ const STATUS_OPTIONS: SelectOption[] = [
   { value: "true",  label: "Active"   },
   { value: "false", label: "Inactive" },
 ];
-const STATUS_FETCH_PAGE = staticOptionsFetchPage(STATUS_OPTIONS);
+
+const DELETED_OPTIONS: SelectOption[] = [
+  { value: "false", label: "Hide deleted" },
+  { value: "true",  label: "Show deleted" },
+];
+
+const STATUS_FETCH_PAGE  = staticOptionsFetchPage(STATUS_OPTIONS);
+const DELETED_FETCH_PAGE = staticOptionsFetchPage(DELETED_OPTIONS);
 
 const panelStyle: React.CSSProperties = {
   position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
@@ -133,28 +97,31 @@ const PER_PAGE = 25;
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-const UserManagementList: React.FC = () => {
-  const token = useSelector(selectAccessToken);
-  const dispatch   = useDispatch();
-  const apiKey     = useSelector(selectApiKey);
-  const access     = useSelector((s: RootState) => selectAccessData(s));
-  const perms      = (access?.["user_management"] ?? {}) as Record<string, boolean>;
+const HouseHelperList: React.FC = () => {
+  const token    = useSelector(selectAccessToken);
+  const dispatch = useDispatch();
+  const apiKey   = useSelector(selectApiKey);
+  const access   = useSelector((s: RootState) => selectAccessData(s));
+  const perms    = (access?.["house_helper"] ?? {}) as Record<string, boolean>;
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [data,            setData]            = React.useState<UserItem[]>([]);
+  const [data,            setData]            = React.useState<HouseHelperApiItem[]>([]);
+  const [viewItem,        setViewItem]        = React.useState<HouseHelperApiItem | null>(null);
+  const [viewLoading,     setViewLoading]     = React.useState(false);
   const [search,          setSearch]          = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter,    setStatusFilter]    = React.useState("");
+  const [showDeleted,     setShowDeleted]     = React.useState("false");
   const [total,           setTotal]           = React.useState(0);
   const [loading,         setLoading]         = React.useState(false);
   const [loadingMore,     setLoadingMore]     = React.useState(false);
   const [hasMore,         setHasMore]         = React.useState(false);
   const [showModal,       setShowModal]       = React.useState(false);
-  const [editItem,        setEditItem]        = React.useState<UserItem | null>(null);
+  const [editItem,        setEditItem]        = React.useState<HouseHelperApiItem | null>(null);
   const [statusModal,     setStatusModal]     = React.useState<StatusState>(CLOSE_STATUS);
   const [statusLoading,   setStatusLoading]   = React.useState(false);
   const [showFilterPanel, setShowFilterPanel] = React.useState(false);
   const [formSubmitting,  setFormSubmitting]  = React.useState(false);
-  const [profileCard,     setProfileCard]     = React.useState<{ el: HTMLElement; user: CardUser } | null>(null);
 
   const pageRef        = useRef(1);
   const filterPanelRef = useRef<HTMLDivElement>(null);
@@ -178,9 +145,10 @@ const UserManagementList: React.FC = () => {
     (page: number) => ({
       page, limit: PER_PAGE,
       search:    debouncedSearch || undefined,
-      is_active: statusFilter   || undefined,
+      is_active: statusFilter    || undefined,
+      is_delete: showDeleted === "true" ? "true" : undefined,
     }),
-    [debouncedSearch, statusFilter],
+    [debouncedSearch, statusFilter, showDeleted],
   );
 
   const fetchPage = useCallback(
@@ -189,31 +157,27 @@ const UserManagementList: React.FC = () => {
       append ? setLoadingMore(true) : setLoading(true);
       try {
         const params = buildParams(page);
-        const key    = cacheKey("users", params as Record<string, unknown>);
+        const key    = cacheKey(ENDPOINT, params as Record<string, unknown>);
 
-        // Page 1 (non-append) uses SWR: serve cached data instantly while
-        // revalidating in background. Append / pagination always fetches fresh.
         const tok = token ?? undefined;
         const res = append || page > 1
-          ? await getData<UsersApiResponse>({ endpoint: "users", token: tok, instance: "identity", params })
-          : await fetchSWR<UsersApiResponse>(
+          ? await getData<HouseHelperApiResponse>({ endpoint: ENDPOINT, token: tok, instance: "identity", params })
+          : await fetchSWR<HouseHelperApiResponse>(
               key,
-              () => getData<UsersApiResponse>({ endpoint: "users", token: tok, instance: "identity", params }),
+              () => getData<HouseHelperApiResponse>({ endpoint: ENDPOINT, token: tok, instance: "identity", params }),
               30_000, 60_000,
               (fresh) => {
-                const freshItems = fresh.data.data.map(mapUser);
-                setData(freshItems);
+                setData(fresh.data.data);
                 setTotal(fresh.data.total);
                 setHasMore(1 < fresh.data.totalPages);
               },
             );
 
-        const items = res.data.data.map(mapUser);
-        setData((prev) => (append ? [...prev, ...items] : items));
+        setData((prev) => (append ? [...prev, ...res.data.data] : res.data.data));
         setTotal(res.data.total);
         setHasMore(page < res.data.totalPages);
         pageRef.current = page;
-      } catch { showToastnew.error("Failed to fetch users"); }
+      } catch { showToastnew.error("Failed to fetch house helpers"); }
       finally   { append ? setLoadingMore(false) : setLoading(false); if (!append) requestAnimationFrame(() => requestAnimationFrame(() => emitNavDone())); }
     },
     [apiKey, token, buildParams, dispatch],
@@ -222,18 +186,63 @@ const UserManagementList: React.FC = () => {
   React.useEffect(() => { pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
   const handleLoadMore = useCallback(() => fetchPage(pageRef.current + 1, true), [fetchPage]);
-  const handleRefresh  = useCallback(() => { invalidatePrefix("users"); pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
+  const handleRefresh  = useCallback(() => { invalidatePrefix(ENDPOINT); pageRef.current = 1; setData([]); fetchPage(1, false); }, [fetchPage]);
 
-  const handleEdit   = useCallback((row: UserItem) => { setEditItem(row); setShowModal(true); }, []);
-  const handleDelete = useCallback(async (row: UserItem) => {
-    await deleteData({ endpoint: `users/${row._id}`, token: token, instance: "identity" });
-    showToastnew.success("User deleted");
+  const openView = useCallback((row: HouseHelperApiItem) => {
+    setViewItem(row);
+    const params = new URLSearchParams(searchParams);
+    params.set("cleanerId", row.cleaner_id || row.reference_id);
+    setSearchParams(params, { replace: false });
+  }, [searchParams, setSearchParams]);
+
+  const closeView = useCallback(() => {
+    setViewItem(null);
+    const params = new URLSearchParams(searchParams);
+    params.delete("cleanerId");
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const handleViewToEdit = useCallback(() => {
+    if (!viewItem) return;
+    setEditItem(viewItem);
+    closeView();
+    setShowModal(true);
+  }, [viewItem, closeView]);
+
+  // Restore the viewed record from the URL (deep-link / refresh support).
+  React.useEffect(() => {
+    const cleanerId = searchParams.get("cleanerId");
+    if (!cleanerId || viewItem) return;
+
+    const local = data.find((d) => d.cleaner_id === cleanerId || d.reference_id === cleanerId);
+    if (local) { setViewItem(local); return; }
+    if (!apiKey) return;
+
+    setViewLoading(true);
+    getData<HouseHelperApiResponse>({
+      endpoint: ENDPOINT, token: token ?? undefined, instance: "identity",
+      params: { search: cleanerId, limit: 5 },
+    })
+      .then((res) => {
+        const match = res.data.data.find((d) => d.cleaner_id === cleanerId || d.reference_id === cleanerId);
+        if (match) setViewItem(match);
+        else showToastnew.error("House helper not found for the link");
+      })
+      .catch(() => showToastnew.error("Failed to load house helper"))
+      .finally(() => setViewLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, data, apiKey, token]);
+
+  const handleEdit   = useCallback((row: HouseHelperApiItem) => { setEditItem(row); setShowModal(true); }, []);
+  const handleDelete = useCallback(async (row: HouseHelperApiItem) => {
+    await deleteData({ endpoint: `${ENDPOINT}/${row._id}`, token: token, instance: "identity" });
+    showToastnew.success("House helper deleted");
     handleRefresh();
   }, [token, handleRefresh]);
 
   const handleBulkDelete = useCallback(async (ids: (string | number)[]) => {
-    await Promise.all(ids.map((id) => deleteData({ endpoint: `users/${id}`, token: token, instance: "identity" })));
-    showToastnew.success(`${ids.length} user${ids.length > 1 ? "s" : ""} deleted`);
+    await Promise.all(ids.map((id) => deleteData({ endpoint: `${ENDPOINT}/${id}`, token: token, instance: "identity" })));
+    showToastnew.success(`${ids.length} house helper${ids.length > 1 ? "s" : ""} deleted`);
     handleRefresh();
   }, [token, handleRefresh]);
 
@@ -242,10 +251,10 @@ const UserManagementList: React.FC = () => {
     setStatusLoading(true);
     try {
       await patchData({
-        endpoint: `users/${statusModal.id}`, token: token, instance: "identity",
+        endpoint: `${ENDPOINT}/${statusModal.id}`, token: token, instance: "identity",
         data: { is_active: !statusModal.is_active },
       });
-      showToastnew.success(statusModal.is_active ? "User deactivated" : "User activated");
+      showToastnew.success(statusModal.is_active ? "House helper deactivated" : "House helper activated");
       setStatusModal(CLOSE_STATUS);
       handleRefresh();
     } catch (err: unknown) { showToastnew.error(extractErrorMessage(err)); }
@@ -254,28 +263,35 @@ const UserManagementList: React.FC = () => {
 
   const closeCreateModal = () => { setShowModal(false); setEditItem(null); setFormSubmitting(false); };
 
-  const activeFilterCount = statusFilter ? 1 : 0;
+  const activeFilterCount = (statusFilter ? 1 : 0) + (showDeleted === "true" ? 1 : 0);
 
-  const handleAvatarClick = useCallback((e: React.MouseEvent<HTMLDivElement>, row: UserItem) => {
-    setProfileCard({
-      el:   e.currentTarget,
-      user: { name: row.name, email: row.email, role: row.role_name, profile_image_url: row.profile_image_url },
-    });
-  }, []);
-
-  const columns = useMemo<GridColumn<UserItem>[]>(() => [
+  const columns = useMemo<GridColumn<HouseHelperApiItem>[]>(() => [
     {
-      field: "name",
-      headerName: "User Name",
-      minWidth: 200,
-      sortable: true,
-      renderCell: ({ row }) => <UserNameCell row={row} onAvatarClick={handleAvatarClick} />,
+      field: "reference_id", headerName: "Reference ID", minWidth: 150,
+      renderCell: ({ row }) => (
+        <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, background: "var(--dt-header)", color: "var(--dt-text)", padding: "2px 7px", borderRadius: 5 }}>
+          {row.reference_id}
+        </span>
+      ),
     },
-    { field: "email", headerName: "Email", minWidth: 220, sortable: true },
+    { field: "cleaner_name", headerName: "Cleaner Name", minWidth: 180, sortable: true },
     {
-      field: "role_name", headerName: "Role", minWidth: 150,
-      renderCell: ({ value }) => (
-        <span style={{ fontSize: 12, color: "var(--dt-dim)" }}>{(value as string) || "—"}</span>
+      field: "cleaner_id", headerName: "Cleaner ID", minWidth: 130,
+      renderCell: ({ value }) => <span style={{ fontSize: 12, color: "var(--dt-dim)" }}>{(value as string) || "—"}</span>,
+    },
+    { field: "mobile_number", headerName: "Mobile Number", minWidth: 150 },
+    {
+      field: "address", headerName: "Address", minWidth: 180,
+      renderCell: ({ row }) => (
+        <span style={{ fontSize: 12, color: "var(--dt-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {row.address || "—"}
+        </span>
+      ),
+    },
+    {
+      field: "payments", headerName: "Payments", minWidth: 100,
+      renderCell: ({ row }) => (
+        <span style={{ fontSize: 12, color: "var(--dt-dim)" }}>{row.payments?.length ?? 0}</span>
       ),
     },
     {
@@ -283,7 +299,7 @@ const UserManagementList: React.FC = () => {
       renderCell: ({ row }) => (
         <button
           type="button"
-          onClick={() => setStatusModal({ isOpen: true, id: row._id, name: row.name, is_active: row.is_active })}
+          onClick={() => setStatusModal({ isOpen: true, id: row._id, name: row.cleaner_name, is_active: row.is_active })}
           style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
           title={row.is_active ? "Click to deactivate" : "Click to activate"}
         >
@@ -306,8 +322,8 @@ const UserManagementList: React.FC = () => {
         <CleanSearchBar
           value={search}
           onChange={(v) => setSearch(v)}
-          placeholder="Search by name or email"
-          width={260}
+          placeholder="Search by name, cleaner ID, mobile or reference"
+          width={280}
         />
 
         <div style={{ position: "relative" }} ref={filterPanelRef}>
@@ -334,8 +350,14 @@ const UserManagementList: React.FC = () => {
                 placeholder="All statuses"
                 clearable
               />
+              <CleanAsyncSelect
+                label="Deleted records"
+                value={showDeleted}
+                onChange={(value) => setShowDeleted(value)}
+                fetchPage={DELETED_FETCH_PAGE}
+              />
               {activeFilterCount > 0 && (
-                <CleanButton variant="danger" size="xs" onClick={() => setStatusFilter("")} style={{ width: "100%" }}>
+                <CleanButton variant="danger" size="xs" onClick={() => { setStatusFilter(""); setShowDeleted("false"); }} style={{ width: "100%" }}>
                   Clear filters
                 </CleanButton>
               )}
@@ -351,14 +373,14 @@ const UserManagementList: React.FC = () => {
             iconLeft={<Plus style={{ width: 13, height: 13 }} />}
             onClick={() => { setEditItem(null); setShowModal(true); }}
           >
-            Create User
+            Create House Helper
           </CleanButton>
         )}
       </div>
 
       {/* ── Table ─────────────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0 }}>
-        <CustomDatagrid<UserItem>
+        <CustomDatagrid<HouseHelperApiItem>
           rows={data}
           columns={columns}
           getRowId={(row) => row._id}
@@ -371,28 +393,31 @@ const UserManagementList: React.FC = () => {
           onRefresh={handleRefresh}
           selectable={perms.delete}
           onBulkDelete={perms.delete ? handleBulkDelete : undefined}
-          bulkDeleteLabel="Delete selected users — this cannot be undone"
+          bulkDeleteLabel="Delete selected house helpers — this cannot be undone"
+          onRowClick={openView}
+          onView={openView}
           onEdit={perms.edit ? handleEdit : undefined}
           onDelete={perms.delete ? handleDelete : undefined}
-          deleteConfirmTitle="Delete user?"
-          deleteConfirmDescription="This action cannot be undone. The user account will be permanently removed."
+          deleteConfirmTitle="Delete house helper?"
+          deleteConfirmDescription="This will soft-delete the record. It can be restored from the API if needed."
         />
       </div>
 
-      {/* ── Profile card popover ─────────────────────────────────────────────── */}
-      <UserProfileCard
-        user={profileCard?.user ?? null}
-        anchorEl={profileCard?.el ?? null}
-        onClose={() => setProfileCard(null)}
+      {/* ── View modal ────────────────────────────────────────────────────────── */}
+      <HouseHelperViewModal
+        isOpen={!!viewItem || viewLoading}
+        onClose={closeView}
+        onEdit={perms.edit ? handleViewToEdit : undefined}
+        data={viewItem}
       />
 
       {/* ── Create / Edit modal ───────────────────────────────────────────────── */}
       <CleanModal
         isOpen={showModal}
         onClose={closeCreateModal}
-        title={editItem ? "Edit User" : "Create User"}
-        subtitle={editItem ? "Update user details" : "Add a new user account"}
-        maxWidth={520}
+        title={editItem ? "Edit House Helper" : "Create House Helper"}
+        subtitle={editItem ? "Update house helper details" : "Add a new house helper record"}
+        maxWidth={620}
         expandable={false}
         zIndex={99999}
         footer={
@@ -408,18 +433,18 @@ const UserManagementList: React.FC = () => {
             </CleanButton>
             <CleanButton
               type="submit"
-              form={USER_FORM_ID}
+              form={HOUSE_HELPER_FORM_ID}
               variant="primary"
               size="sm"
               loading={formSubmitting}
             >
-              {editItem ? "Update User" : "Create User"}
+              {editItem ? "Update" : "Create"}
             </CleanButton>
           </>
         }
       >
-        <UserForm
-          formId={USER_FORM_ID}
+        <HouseHelperForm
+          formId={HOUSE_HELPER_FORM_ID}
           token={token}
           initialValues={editItem ?? undefined}
           onSuccess={() => { closeCreateModal(); handleRefresh(); }}
@@ -454,7 +479,7 @@ const UserManagementList: React.FC = () => {
           <AlertTriangle style={{ width: 20, height: 20, color: "#f59e0b", flexShrink: 0 }} />
           <div>
             <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "var(--fi-text)" }}>
-              {statusModal.is_active ? "Deactivate" : "Activate"} User
+              {statusModal.is_active ? "Deactivate" : "Activate"} House Helper
             </p>
             <p style={{ margin: 0, fontSize: 13, color: "var(--fi-muted)", lineHeight: 1.5 }}>
               Are you sure you want to {statusModal.is_active ? "deactivate" : "activate"}{" "}
@@ -467,4 +492,4 @@ const UserManagementList: React.FC = () => {
   );
 };
 
-export default UserManagementList;
+export default HouseHelperList;

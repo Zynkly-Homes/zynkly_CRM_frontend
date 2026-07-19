@@ -1408,13 +1408,15 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
                 />
               ))}
 
-              {/* Actions column header — always last user-visible column */}
+              {/* Actions column header — always last user-visible column, pinned right */}
               {hasActionCol && (
                 <th
+                  className="sticky z-40"
                   style={{
-                    width: ACTION_COL_WIDTH, minWidth: ACTION_COL_WIDTH,
+                    width: ACTION_COL_WIDTH, minWidth: ACTION_COL_WIDTH, right: 36,
                     padding: '0 8px', height: 37,
                     background: 'var(--dt-header)',
+                    borderLeft: '1px solid var(--dt-border)',
                     borderBottom: '1px solid var(--dt-border)',
                     textAlign: 'left',
                   }}
@@ -1504,10 +1506,16 @@ export function CustomDatagrid<T extends Record<string, unknown>>({
                       />
                     ))}
 
-                    {/* Actions cell — always after data columns */}
+                    {/* Actions cell — always after data columns, pinned right */}
                     {hasActionCol && (
                       <td
-                        style={{ width: ACTION_COL_WIDTH, minWidth: ACTION_COL_WIDTH, padding: '0 8px', height: 32 }}
+                        className="sticky"
+                        style={{
+                          width: ACTION_COL_WIDTH, minWidth: ACTION_COL_WIDTH, right: 36,
+                          padding: '0 8px', height: 32,
+                          background: isSelected ? 'var(--dt-hover)' : 'var(--dt-bg)',
+                          borderLeft: '1px solid var(--dt-border)',
+                        }}
                         onClick={e => e.stopPropagation()}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>

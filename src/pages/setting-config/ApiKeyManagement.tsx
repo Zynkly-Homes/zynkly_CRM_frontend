@@ -11,7 +11,7 @@ import { scrollToTop } from "../../utils/scrollToTop";
 import type { RootState } from "../../store";
 import ApiKeyForm, { KeyRevealBanner } from "./ApiKeyForm";
 import {
-  CleanButton, CleanSearchBar, CleanSelect, CleanModal, type SelectOption,
+  CleanButton, CleanSearchBar, CleanAsyncSelect, staticOptionsFetchPage, CleanModal, type SelectOption,
 } from "../../atoms/my_clean_code_atoms";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -95,6 +95,7 @@ const STATUS_OPTIONS: SelectOption[] = [
   { value: "true",  label: "Active"   },
   { value: "false", label: "Inactive" },
 ];
+const STATUS_FETCH_PAGE = staticOptionsFetchPage(STATUS_OPTIONS);
 
 const panelStyle: React.CSSProperties = {
   position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
@@ -278,12 +279,13 @@ const ApiKeyManagement: React.FC = () => {
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--fi-muted)" }}>
                 Filters
               </span>
-              <CleanSelect
+              <CleanAsyncSelect
                 label="Status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                options={STATUS_OPTIONS}
+                onChange={(value) => setStatusFilter(value)}
+                fetchPage={STATUS_FETCH_PAGE}
                 placeholder="All statuses"
+                clearable
               />
               {activeFilterCount > 0 && (
                 <CleanButton variant="danger" size="xs" onClick={() => setStatusFilter("")} style={{ width: "100%" }}>

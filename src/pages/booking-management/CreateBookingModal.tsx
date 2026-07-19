@@ -1,19 +1,20 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectAccessToken } from "../../store/slices/authSlice";
 import { Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
-import { postData, patchData } from "../../services/crmServices";
+import { getData, postData, patchData } from "../../services/crmServices";
 import { parseBookingRawText, ParsedBookingFields } from "./bookingParser";
 import {
-  CleanButton, CleanInput, CleanTextarea, CleanSelect, CleanModal, type SelectOption,
+  CleanButton, CleanInput, CleanTextarea, CleanAsyncSelect, CleanModal, staticOptionsFetchPage,
+  type SelectOption, type AsyncSelectPage, type AsyncSelectFetchParams,
 } from "../../atoms/my_clean_code_atoms";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type BookingVia = "app" | "website" | "laptop" | "whatsapp_to_crm" | "call";
-type BookingFields = ParsedBookingFields & { booking_via: BookingVia };
+export type BookingVia = "app" | "website" | "laptop" | "whatsapp_to_crm" | "call";
+type BookingFields = ParsedBookingFields & { booking_via: BookingVia; cleaner_id: string };
 
 interface BookingEntry {
   id:        string;
@@ -32,7 +33,7 @@ interface SubmitResult {
 
 type AbandonReason = "close" | "navigate";
 
-type BookingStatus =
+export type BookingStatus =
   | "ongoing" | "completed" | "cancelled_via_user" | "cancelled_by_admin_crm";
 
 type ModalMode = "create" | "view" | "edit";
@@ -48,6 +49,8 @@ export interface InitialBookingData {
   booking_via?:      BookingVia;
   booking_status?:   BookingStatus;
   package_name?:     string;
+  cleaner_id?:       string;
+  house_helper_name?: string;
   payment_method?:   string;
   payment_amount?:   number;
   payment_status?:   string;
@@ -68,13 +71,13 @@ type Props = {
 
 const DRAFT_KEY = "booking_creation_draft_v2";
 
-const BRANCH_OPTIONS: SelectOption[] = [
+export const BRANCH_OPTIONS: SelectOption[] = [
   { value: "jalandhar",  label: "Jalandhar"  },
   { value: "chandigarh", label: "Chandigarh" },
   { value: "ludhiana",   label: "Ludhiana"   },
 ];
 
-const BOOKING_VIA_OPTIONS: SelectOption[] = [
+export const BOOKING_VIA_OPTIONS: SelectOption[] = [
   { value: "app",             label: "App"            },
   { value: "website",         label: "Website"        },
   { value: "laptop",          label: "Laptop"         },
@@ -82,14 +85,14 @@ const BOOKING_VIA_OPTIONS: SelectOption[] = [
   { value: "call",            label: "Call"           },
 ];
 
-const BOOKING_STATUS_OPTIONS: SelectOption[] = [
+export const BOOKING_STATUS_OPTIONS: SelectOption[] = [
   { value: "ongoing",               label: "Ongoing"           },
   { value: "completed",             label: "Completed"         },
   { value: "cancelled_via_user",    label: "Cancelled (User)"  },
   { value: "cancelled_by_admin_crm",label: "Cancelled (Admin)" },
 ];
 
-const PACKAGE_OPTIONS: SelectOption[] = [
+export const PACKAGE_OPTIONS: SelectOption[] = [
   { value: "Room Cleaning",                                         label: "Room Cleaning"                                         },
   { value: "Washroom Cleaning",                                     label: "Washroom Cleaning"                                     },
   { value: "Kitchen Cleaning",                                      label: "Kitchen Cleaning"                                      },
@@ -106,16 +109,26 @@ const PACKAGE_OPTIONS: SelectOption[] = [
   { value: "Refrigerator Cleaning",                                 label: "Refrigerator Cleaning"                                 },
 ];
 
-const PAYMENT_METHOD_OPTIONS: SelectOption[] = [
+export const PAYMENT_METHOD_OPTIONS: SelectOption[] = [
   { value: "online", label: "Online" },
   { value: "cash",   label: "Cash"   },
 ];
 
-const PAYMENT_STATUS_OPTIONS: SelectOption[] = [
+export const PAYMENT_STATUS_OPTIONS: SelectOption[] = [
   { value: "paid",      label: "Paid"      },
   { value: "pending",   label: "Pending"   },
   { value: "cancelled", label: "Cancelled" },
 ];
+
+// ── Searchable-dropdown adapters for the static option lists above ─────────
+// (feeds CleanAsyncSelect so every dropdown in this flow is search-based —
+// no native <select> anywhere)
+export const BRANCH_FETCH_PAGE         = staticOptionsFetchPage(BRANCH_OPTIONS);
+export const BOOKING_VIA_FETCH_PAGE    = staticOptionsFetchPage(BOOKING_VIA_OPTIONS);
+export const BOOKING_STATUS_FETCH_PAGE = staticOptionsFetchPage(BOOKING_STATUS_OPTIONS);
+export const PACKAGE_FETCH_PAGE        = staticOptionsFetchPage(PACKAGE_OPTIONS);
+export const PAYMENT_METHOD_FETCH_PAGE = staticOptionsFetchPage(PAYMENT_METHOD_OPTIONS);
+export const PAYMENT_STATUS_FETCH_PAGE = staticOptionsFetchPage(PAYMENT_STATUS_OPTIONS);
 
 const ABANDON_COPY: Record<AbandonReason, { title: string; body: string; confirm: string }> = {
   close: {
@@ -143,11 +156,45 @@ function emptyFields(): BookingFields {
     branch:          "jalandhar",
     booking_via:     "whatsapp_to_crm",
     package_name:    "",
+    cleaner_id:      "",
     payment_method:  "online",
     payment_amount:  "",
     payment_status:  "paid",
     booking_created_date_and_time:
       `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`,
+  };
+}
+
+// ── House helper options (fetched from /cleaner-bookings) ──────────────────
+
+export interface HouseHelperRecord { _id: string; cleaner_name: string; mobile_number?: string }
+interface HouseHelperApiResponse {
+  success: boolean;
+  data: { data: HouseHelperRecord[]; total: number; page: number; limit: number; totalPages: number };
+}
+
+export async function fetchHouseHelperRecords(token?: string): Promise<HouseHelperRecord[]> {
+  const res = await getData<HouseHelperApiResponse>({
+    endpoint: "cleaner-bookings", token, instance: "identity", params: { page: 1, limit: 100 },
+  });
+  return res.data.data;
+}
+
+export function houseHelperOptionsFrom(records: HouseHelperRecord[]): SelectOption[] {
+  return records.map((h) => ({ label: h.cleaner_name, value: h._id, meta: { mobile_number: h.mobile_number } }));
+}
+
+/** Search + pagination against GET /cleaner-bookings — feeds CleanAsyncSelect. */
+export function makeHouseHelperFetchPage(token?: string) {
+  return async ({ search, page, limit }: AsyncSelectFetchParams): Promise<AsyncSelectPage> => {
+    const res = await getData<HouseHelperApiResponse>({
+      endpoint: "cleaner-bookings", token, instance: "identity",
+      params: { page, limit, search: search || undefined },
+    });
+    return {
+      options:  houseHelperOptionsFrom(res.data.data),
+      hasMore:  page < res.data.totalPages,
+    };
   };
 }
 
@@ -179,6 +226,7 @@ function buildPayload(
     live_location_url: entry.fields.live_location_url || undefined,
     booking_via:    entry.fields.booking_via,
     package_name:   entry.fields.package_name   || undefined,
+    cleaner_id:     entry.fields.cleaner_id     || undefined,
     payment_method: entry.fields.payment_method || undefined,
     payment_amount: entry.fields.payment_amount !== ""
       ? Number(entry.fields.payment_amount) : undefined,
@@ -198,7 +246,7 @@ function extractErrorMessage(err: unknown): string {
 
 // ── Map geocoding helpers ──────────────────────────────────────────────────
 
-function extractLatLngFromMapUrl(input: string): { lat: number; lng: number } | null {
+export function extractLatLngFromMapUrl(input: string): { lat: number; lng: number } | null {
   const s = input.trim();
   if (!s) return null;
 
@@ -237,7 +285,7 @@ function extractLatLngFromMapUrl(input: string): { lat: number; lng: number } | 
   return null;
 }
 
-async function reverseGeocodeLatLng(lat: number, lng: number, signal?: AbortSignal): Promise<string | null> {
+export async function reverseGeocodeLatLng(lat: number, lng: number, signal?: AbortSignal): Promise<string | null> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
@@ -301,16 +349,17 @@ const CARD_HDR: React.CSSProperties = {
 };
 
 const BookingEntryCard: React.FC<{
-  entry:          BookingEntry;
-  index:          number;
-  total:          number;
-  isSubmitting:   boolean;
-  globalBusy:     boolean;
+  entry:            BookingEntry;
+  index:            number;
+  total:            number;
+  isSubmitting:     boolean;
+  globalBusy:       boolean;
+  cleanerFetchPage: (params: AsyncSelectFetchParams) => Promise<AsyncSelectPage>;
   onChange:       (id: string, p: Partial<BookingEntry>) => void;
   onRemove:       (id: string) => void;
   onReset:        (id: string) => void;
   onCreateSingle: (id: string) => void;
-}> = ({ entry, index, total, isSubmitting, globalBusy, onChange, onRemove, onReset, onCreateSingle }) => {
+}> = ({ entry, index, total, isSubmitting, globalBusy, cleanerFetchPage, onChange, onRemove, onReset, onCreateSingle }) => {
 
   const handleRawChange = (raw: string) => {
     const parsed = parseBookingRawText(raw);
@@ -435,29 +484,39 @@ const BookingEntryCard: React.FC<{
                 suffix={addressFetching ? <Loader2 style={{ width: 13, height: 13, animation: "spin 1s linear infinite" }} /> : undefined}
                 onChange={e => handleLocationUrl(e.target.value)} />
             </div>
-            <CleanSelect label="Branch" required
-              value={entry.fields.branch} options={BRANCH_OPTIONS}
+            <CleanAsyncSelect label="Branch" required
+              value={entry.fields.branch} fetchPage={BRANCH_FETCH_PAGE}
               error={entry.errors.branch}
-              onChange={e => setField("branch", e.target.value)} />
-            <CleanSelect label="Booking Via" required
-              value={entry.fields.booking_via} options={BOOKING_VIA_OPTIONS}
+              onChange={(value) => setField("branch", value)} />
+            <CleanAsyncSelect label="Booking Via" required
+              value={entry.fields.booking_via} fetchPage={BOOKING_VIA_FETCH_PAGE}
               error={entry.errors.booking_via}
-              onChange={e => setField("booking_via", e.target.value as BookingVia)} />
+              onChange={(value) => setField("booking_via", value as BookingVia)} />
             <div className="form-grid-full">
-              <CleanSelect label="Package Name"
-                value={entry.fields.package_name} options={PACKAGE_OPTIONS}
+              <CleanAsyncSelect label="Package Name"
+                value={entry.fields.package_name} fetchPage={PACKAGE_FETCH_PAGE}
                 placeholder="Select package…"
-                onChange={e => setField("package_name", e.target.value)} />
+                clearable
+                onChange={(value) => setField("package_name", value)} />
             </div>
-            <CleanSelect label="Payment Method"
-              value={entry.fields.payment_method} options={PAYMENT_METHOD_OPTIONS}
-              onChange={e => setField("payment_method", e.target.value)} />
+            <div className="form-grid-full">
+              <CleanAsyncSelect label="House Helper"
+                value={entry.fields.cleaner_id}
+                fetchPage={cleanerFetchPage}
+                placeholder="Select house helper…"
+                searchPlaceholder="Search by name, ID or mobile…"
+                clearable
+                onChange={(value) => setField("cleaner_id", value)} />
+            </div>
+            <CleanAsyncSelect label="Payment Method"
+              value={entry.fields.payment_method} fetchPage={PAYMENT_METHOD_FETCH_PAGE}
+              onChange={(value) => setField("payment_method", value)} />
             <CleanInput label="Payment Amount" type="number"
               value={entry.fields.payment_amount} placeholder="0"
               onChange={e => setField("payment_amount", e.target.value)} />
-            <CleanSelect label="Payment Status"
-              value={entry.fields.payment_status} options={PAYMENT_STATUS_OPTIONS}
-              onChange={e => setField("payment_status", e.target.value)} />
+            <CleanAsyncSelect label="Payment Status"
+              value={entry.fields.payment_status} fetchPage={PAYMENT_STATUS_FETCH_PAGE}
+              onChange={(value) => setField("payment_status", value)} />
            
             <CleanInput label="Date & Time" type="datetime-local"
               value={entry.fields.booking_created_date_and_time}
@@ -536,6 +595,7 @@ type ViewEditFields = {
   booking_via:       BookingVia;
   booking_status:    BookingStatus;
   package_name:      string;
+  cleaner_id:        string;
   payment_method:    string;
   payment_amount:    string;
   payment_status:    string;
@@ -551,6 +611,7 @@ function dataToFields(d: InitialBookingData): ViewEditFields {
     booking_via:       (d.booking_via      as BookingVia)    ?? "whatsapp_to_crm",
     booking_status:    (d.booking_status   as BookingStatus) ?? "completed",
     package_name:      d.package_name   ?? "",
+    cleaner_id:        d.cleaner_id     ?? "",
     payment_method:    d.payment_method ?? "online",
     payment_amount:    d.payment_amount != null ? String(d.payment_amount) : "",
     payment_status:    d.payment_status ?? "paid",
@@ -573,6 +634,7 @@ const ViewEditContent: React.FC<{
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geocodeAbort = useRef<AbortController | null>(null);
   const [addressFetching, setAddressFetching] = useState(false);
+  const cleanerFetchPage = useMemo(() => makeHouseHelperFetchPage(token), [token]);
 
   // Reset form whenever a different booking is opened
   useEffect(() => {
@@ -645,6 +707,7 @@ const ViewEditContent: React.FC<{
           booking_via:       fields.booking_via,
           booking_status:    fields.booking_status,
           package_name:      fields.package_name      || undefined,
+          cleaner_id:        fields.cleaner_id        || undefined,
           payment_method:    fields.payment_method    || undefined,
           payment_amount:    fields.payment_amount !== ""
             ? Number(fields.payment_amount) : undefined,
@@ -717,43 +780,55 @@ const ViewEditContent: React.FC<{
             onChange={e => handleLocationUrl(e.target.value)} />
         </div>
 
-        <CleanSelect label="Branch"
-          value={fields.branch} options={BRANCH_OPTIONS}
+        <CleanAsyncSelect label="Branch"
+          value={fields.branch} fetchPage={BRANCH_FETCH_PAGE}
           disabled={isView}
-          onChange={e => setField("branch", e.target.value)} />
+          onChange={(value) => setField("branch", value)} />
 
-        <CleanSelect label="Booking Via"
-          value={fields.booking_via} options={BOOKING_VIA_OPTIONS}
+        <CleanAsyncSelect label="Booking Via"
+          value={fields.booking_via} fetchPage={BOOKING_VIA_FETCH_PAGE}
           disabled={isView}
-          onChange={e => setField("booking_via", e.target.value as BookingVia)} />
+          onChange={(value) => setField("booking_via", value as BookingVia)} />
 
-        <CleanSelect label="Status"
-          value={fields.booking_status} options={BOOKING_STATUS_OPTIONS}
+        <CleanAsyncSelect label="Status"
+          value={fields.booking_status} fetchPage={BOOKING_STATUS_FETCH_PAGE}
           disabled={isView}
-          onChange={e => setField("booking_status", e.target.value as BookingStatus)} />
+          onChange={(value) => setField("booking_status", value as BookingStatus)} />
 
         <div className="form-grid-full">
-          <CleanSelect label="Package Name"
-            value={fields.package_name} options={PACKAGE_OPTIONS}
+          <CleanAsyncSelect label="Package Name"
+            value={fields.package_name} fetchPage={PACKAGE_FETCH_PAGE}
             placeholder="Select package…"
             disabled={isView}
-            onChange={e => setField("package_name", e.target.value)} />
+            clearable={!isView}
+            onChange={(value) => setField("package_name", value)} />
         </div>
 
-        <CleanSelect label="Payment Method"
-          value={fields.payment_method} options={PAYMENT_METHOD_OPTIONS}
+        <div className="form-grid-full">
+          <CleanAsyncSelect label="House Helper"
+            value={fields.cleaner_id}
+            fetchPage={cleanerFetchPage}
+            placeholder="Select house helper…"
+            searchPlaceholder="Search by name, ID or mobile…"
+            disabled={isView}
+            clearable={!isView}
+            onChange={(value) => setField("cleaner_id", value)} />
+        </div>
+
+        <CleanAsyncSelect label="Payment Method"
+          value={fields.payment_method} fetchPage={PAYMENT_METHOD_FETCH_PAGE}
           disabled={isView}
-          onChange={e => setField("payment_method", e.target.value)} />
+          onChange={(value) => setField("payment_method", value)} />
 
         <CleanInput label="Payment Amount" type="number"
           value={fields.payment_amount} placeholder="0"
           readOnly={isView} disabled={isView}
           onChange={e => setField("payment_amount", e.target.value)} />
 
-        <CleanSelect label="Payment Status"
-          value={fields.payment_status} options={PAYMENT_STATUS_OPTIONS}
+        <CleanAsyncSelect label="Payment Status"
+          value={fields.payment_status} fetchPage={PAYMENT_STATUS_FETCH_PAGE}
           disabled={isView}
-          onChange={e => setField("payment_status", e.target.value)} />
+          onChange={(value) => setField("payment_status", value)} />
 
        
       </div>
@@ -780,6 +855,9 @@ const CreateModeContent: React.FC<{ isOpen: boolean; onClose: () => void; onCrea
 
   const isDirty     = hasDraft(entries);
   const showResults = results.length > 0;
+
+  // House helper search + pagination — shared fetcher, bound to the current token.
+  const cleanerFetchPage = useMemo(() => makeHouseHelperFetchPage(cookies.t), [cookies.t]);
 
   // ── Draft lifecycle ──────────────────────────────────────────────────────
 
@@ -1032,6 +1110,7 @@ const CreateModeContent: React.FC<{ isOpen: boolean; onClose: () => void; onCrea
                 entry={entry} index={i} total={entries.length}
                 isSubmitting={submittingIds.has(entry.id)}
                 globalBusy={globalBusy}
+                cleanerFetchPage={cleanerFetchPage}
                 onChange={updateEntry}
                 onRemove={removeEntry}
                 onReset={resetEntry}

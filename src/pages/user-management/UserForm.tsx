@@ -4,7 +4,7 @@ import * as Yup from "yup";
 import { showToastnew } from "../../services/toastifynewService/toastifynewService";
 import { getData, postData, patchData } from "../../services/crmServices";
 import {
-  CleanInput, CleanSelect, type SelectOption,
+  CleanInput, CleanAsyncSelect, type AsyncSelectFetchParams, type AsyncSelectPage,
 } from "../../atoms/my_clean_code_atoms";
 import ImageUploadAvatar from "../../atoms/ImageUploadAvatar";
 
@@ -31,6 +31,7 @@ type UserFormProps = {
     email: string;
     mobile_no?: string;
     role_id?: string;
+    role_name?: string;
     profile_image_url?: string | null;
   };
   onSuccess: () => void;
@@ -46,11 +47,18 @@ function extractErrorMessage(err: unknown): string {
   return e?.error?.response?.data?.message ?? e?.message ?? "Operation failed";
 }
 
-async function fetchRoleOptions(token?: string): Promise<SelectOption[]> {
-  const res = await getData<RolesApiResponse>({
-    endpoint: "roles", token, instance: "identity", params: { page: 1, limit: 100 },
-  });
-  return res.data.data.map((r) => ({ label: r.role_name, value: r._id }));
+/** Search + pagination against GET /roles — feeds CleanAsyncSelect. */
+function makeRoleFetchPage(token?: string) {
+  return async ({ search, page, limit }: AsyncSelectFetchParams): Promise<AsyncSelectPage> => {
+    const res = await getData<RolesApiResponse>({
+      endpoint: "roles", token, instance: "identity",
+      params: { page, limit, search: search || undefined },
+    });
+    return {
+      options: res.data.data.map((r) => ({ label: r.role_name, value: r._id })),
+      hasMore: page * limit < res.data.total,
+    };
+  };
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -59,16 +67,8 @@ const UserForm: React.FC<UserFormProps> = ({
   token, formId, initialValues, onSuccess, onSubmittingChange, onResetReady,
 }) => {
   const isEdit = !!initialValues?._id;
-  const [roles,        setRoles]        = React.useState<SelectOption[]>([]);
-  const [loadingRoles, setLoadingRoles] = React.useState(true);
-
-  React.useEffect(() => {
-    setLoadingRoles(true);
-    fetchRoleOptions(token)
-      .then(setRoles)
-      .catch(() => showToastnew.error("Failed to load roles"))
-      .finally(() => setLoadingRoles(false));
-  }, [token]);
+  const roleFetchPage = useMemo(() => makeRoleFetchPage(token), [token]);
+  const [roleName, setRoleName] = React.useState<string | undefined>(initialValues?.role_name);
 
   const validationSchema = useMemo(
     () => Yup.object({
@@ -187,14 +187,14 @@ const UserForm: React.FC<UserFormProps> = ({
                   error={touched.password ? errors.password : ""}
                 />
               )}
-              <CleanSelect
+              <CleanAsyncSelect
                 label="Role" required
                 value={values.role_id}
-                options={roles}
-                placeholder={loadingRoles ? "Loading roles…" : "Select Role"}
-                disabled={loadingRoles}
-                onChange={(e) => setFieldValue("role_id", e.target.value)}
-                onBlur={handleBlur}
+                selectedLabel={roleName}
+                fetchPage={roleFetchPage}
+                placeholder="Select Role"
+                searchPlaceholder="Search roles…"
+                onChange={(value, option) => { setFieldValue("role_id", value); setRoleName(option?.label); }}
                 error={touched.role_id ? errors.role_id : ""}
               />
             </div>
